@@ -655,7 +655,7 @@ async function doLogin(form) {
 }
 function pRecovery() {
   return `<div class="lg2"><section class="lp"><div class="hero-char" aria-hidden="true"></div><div class="brand"><span class="logo">9C</span>MY GRADE NINE C</div><div><div class="big" aria-hidden="true">IX C</div><h1>ONE CLASS, ONE DIGITAL HOME</h1><p>Pusat administrasi dan informasi kelas IX C SMP Muhammadiyah 1 Gombong.</p></div><p style="font-size:12px;margin:0">SMP Muhammadiyah 1 Gombong</p></section>
-  <section class="lf"><div><h2>Buat Password Baru</h2><p class="mut" style="margin-top:4px">Masukkan password baru untuk akun Pengelola.</p>
+  <section class="lf"><div><h2>Buat Password Baru</h2><p class="mut" style="margin-top:4px">Masukkan password baru untuk akun Anda.</p>
   <form id="recoveryForm" novalidate style="margin-top:22px"><div id="recerr" class="note lerr" role="alert" hidden></div>
   <div class="fld"><label class="lb" for="rnw">Password baru</label><input id="rnw" name="nw" type="password" autocomplete="new-password" minlength="12" placeholder="Minimal 12 karakter" required></div>
   <div class="fld"><label class="lb" for="rnw2">Ulangi password baru</label><input id="rnw2" name="nw2" type="password" autocomplete="new-password" minlength="12" placeholder="Ulangi password baru" required></div>
@@ -671,6 +671,11 @@ function pLogin() {
   <div class="fld"><label class="lb" for="u">Username</label><input id="u" name="username" type="text" inputmode="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Masukkan username"></div>
   <div class="fld"><label class="lb" for="p">Password</label><div class="pw2"><input id="p" name="pw" type="password" autocomplete="current-password" placeholder="Masukkan password"><button type="button" class="ib" data-act="pwtog" aria-label="Tampilkan password" aria-pressed="false">${ic('eye')}</button></div></div>
   <button id="lbtn" class="btn pri full" type="submit">MASUK</button></form>
+  <p class="lsmall"><button type="button" class="btn sec full" style="margin-top:8px" onclick="const x=document.getElementById('forgotBox');x.hidden=!x.hidden">Lupa Password?</button></p>
+  <div id="forgotBox" class="card pad" hidden style="margin-top:12px">
+    <h2>Reset Password</h2><p class="mut" style="font-size:12px;margin-bottom:10px">Masukkan email yang terdaftar pada akun. Tautan pemulihan akan dikirim ke email tersebut.</p>
+    <form id="forgotForm"><div class="fld"><label class="lb" for="resetEmail">Email akun</label><input id="resetEmail" name="email" type="email" autocomplete="email" placeholder="nama@email.com" required></div><button class="btn pri full" type="submit">KIRIM TAUTAN PEMULIHAN</button><p id="forgotMsg" class="hint" role="status"></p></form>
+  </div>
   <p class="lsmall">Akses khusus guru dan siswa IX C.</p></div></section></div>`;
 }
 
@@ -718,9 +723,21 @@ document.addEventListener('change', (e) => {
   if (e.target.name === 'choice') { const w = e.target.closest('form'), on = e.target.value === 'bringing'; w.querySelectorAll('.bring').forEach((x) => { x.hidden = !on; x.querySelectorAll('input[name=model],textarea[name=reason]').forEach((i) => { i.required = on; }); }); }
   if (e.target.dataset && e.target.dataset.f && e.target.tagName === 'SELECT') { /* sudah ditangani oleh event input */ }
 });
-document.addEventListener('submit', (e) => {
+document.addEventListener('submit', async (e) => {
   const id = e.target.id; if (!id) return; e.preventDefault();
   if (id === 'lf') return doLogin(e.target);
+  if (id === 'forgotForm') {
+    const email = String(new FormData(e.target).get('email') || '').trim();
+    const msg = $('#forgotMsg'), btn = e.target.querySelector('button[type="submit"]');
+    if (!SB) { if (msg) msg.textContent = 'Layanan autentikasi belum siap. Coba muat ulang halaman.'; return; }
+    if (!email) { if (msg) msg.textContent = 'Masukkan email akun terlebih dahulu.'; return; }
+    btn.disabled = true; btn.textContent = 'MENGIRIM…';
+    try {
+      const { error } = await SB.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
+      if (msg) msg.textContent = error ? (error.message || 'Gagal mengirim tautan. Coba lagi nanti.') : 'Jika email terdaftar, tautan pemulihan akan dikirim. Periksa kotak masuk dan folder spam.';
+    } catch (_) { if (msg) msg.textContent = 'Tidak dapat terhubung. Periksa koneksi lalu coba lagi.'; }
+    btn.disabled = false; btn.textContent = 'KIRIM TAUTAN PEMULIHAN'; return;
+  }
   if (!U) return;
   if (id === 'izf') { if (isT()) return deny(); const r = readPhone(new FormData(e.target)); if (r.err) return toast(r.err, 'err'); S.izin.push({ id: nid(), sid: U.sid, d: ymd(), st: 'pending', tn: '', ...r.v }); re(); toast('Formulir terkirim. Status: Pending (simulasi).'); }
 });
@@ -729,7 +746,7 @@ window.addEventListener('hashchange', () => { F._drawer = false; render(); });
 /* ---------- SUPABASE AUTH (nyata) ---------- */
 const SB_URL = 'https://tenyjlwfvbqushjjmjgo.supabase.co', SB_ANON = 'sb_publishable_xwSrDmDQ4GhM_Il-hFJs-w_ZdQNDJjg'; /* anon/publishable key SAJA. Jangan pernah isi service role key. */
 let recoveryMode = false;
-const SB = (window.supabase && SB_ANON !== 'sb_publishable_xwSrDmDQ4GhM_Il-hFJs-w_ZdQNDJjg') ? window.supabase.createClient(SB_URL, SB_ANON, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' } }) : null;
+const SB = (window.supabase && SB_ANON) ? window.supabase.createClient(SB_URL, SB_ANON, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' } }) : null;
 const ROLE_MAP = { guru: 'wali_kelas', siswa: 'siswa', bendahara: 'bendahara', pengelola: 'pengelola' }; /* 'wali_kelas' = peran Guru di kode lama */
 const isP = () => !!U && U.role === 'pengelola';
 const navKey = () => (isP() ? 'admin' : isT() ? 'teacher' : 'student');
