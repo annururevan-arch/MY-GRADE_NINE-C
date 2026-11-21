@@ -522,6 +522,7 @@ const pages = { dash: pDash, profil: pProfil, struktur: pStruktur, jadwal: pJadw
 function render() {
   const app = $('#app'); document.body.classList.toggle('isapp', !!U);
   const [p0, arg] = location.hash.slice(2).split('/');
+  if (recoveryMode) { cur = 'recovery'; app.innerHTML = pRecovery(); return; }
   if (!U) { cur = 'login'; app.innerHTML = pLogin(); return; }
   const ok = NAVS[navKey()].map((x) => x[0]).concat(isP() ? [] : ['album', 'pengumuman']);
   if (p0 && !ok.includes(p0) && pages[p0]) { setHash(isP() ? '#/akun' : '#/dash'); toast('Anda tidak memiliki akses ke halaman tersebut.', 'err'); }
@@ -652,6 +653,17 @@ async function doLogin(form) {
   else if (res === null) { PROFILE_PENDING = true; form.elements.pw.value = ''; return showLoginMsg(NET_MSG, true); } /* gangguan jaringan/server: SESI DIPERTAHANKAN, tawarkan coba lagi */
   if (msg) { if (!keepPw) form.elements.pw.value = ''; form.elements.pw.focus(); return fail(msg); }
 }
+function pRecovery() {
+  return `<div class="lg2"><section class="lp"><div class="hero-char" aria-hidden="true"></div><div class="brand"><span class="logo">9C</span>MY GRADE NINE C</div><div><div class="big" aria-hidden="true">IX C</div><h1>ONE CLASS, ONE DIGITAL HOME</h1><p>Pusat administrasi dan informasi kelas IX C SMP Muhammadiyah 1 Gombong.</p></div><p style="font-size:12px;margin:0">SMP Muhammadiyah 1 Gombong</p></section>
+  <section class="lf"><div><h2>Buat Password Baru</h2><p class="mut" style="margin-top:4px">Masukkan password baru untuk akun Pengelola.</p>
+  <form id="recoveryForm" novalidate style="margin-top:22px"><div id="recerr" class="note lerr" role="alert" hidden></div>
+  <div class="fld"><label class="lb" for="rnw">Password baru</label><input id="rnw" name="nw" type="password" autocomplete="new-password" minlength="12" placeholder="Minimal 12 karakter" required></div>
+  <div class="fld"><label class="lb" for="rnw2">Ulangi password baru</label><input id="rnw2" name="nw2" type="password" autocomplete="new-password" minlength="12" placeholder="Ulangi password baru" required></div>
+  <button class="btn pri full" type="submit">SIMPAN PASSWORD BARU</button></form></div></section></div>`;
+}
+function showRecoveryError(msg) {
+  const el = $('#recerr'); if (el) { el.textContent = msg; el.hidden = false; }
+}
 function pLogin() {
   return `<div class="lg2"><section class="lp"><div class="hero-char" aria-hidden="true"></div><div class="brand"><span class="logo">9C</span>MY GRADE NINE C</div><div><div class="big" aria-hidden="true">IX C</div><h1>ONE CLASS, ONE DIGITAL HOME</h1><p>Pusat administrasi dan informasi kelas IX C SMP Muhammadiyah 1 Gombong.</p></div><p style="font-size:12px;margin:0">SMP Muhammadiyah 1 Gombong</p></section>
   <section class="lf"><div><h2>Selamat Datang!</h2><p class="mut" style="margin-top:4px">Silakan masuk menggunakan akun Anda.</p>
@@ -715,8 +727,9 @@ document.addEventListener('submit', (e) => {
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { const m = document.querySelector('.ov:last-of-type'); if (m) m.remove(); } });
 window.addEventListener('hashchange', () => { F._drawer = false; render(); });
 /* ---------- SUPABASE AUTH (nyata) ---------- */
-const SB_URL = 'https://tenyjlwfvbqushjjmjgo.supabase.co', SB_ANON = 'ISI_ANON_KEY_DI_SINI'; /* anon/publishable key SAJA. Jangan pernah isi service role key. */
-const SB = (window.supabase && SB_ANON !== 'ISI_ANON_KEY_DI_SINI') ? window.supabase.createClient(SB_URL, SB_ANON, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } }) : null;
+const SB_URL = 'https://tenyjlwfvbqushjjmjgo.supabase.co', SB_ANON = 'sb_publishable_xwSrDmDQ4GhM_Il-hFJs-w_ZdQNDJjg'; /* anon/publishable key SAJA. Jangan pernah isi service role key. */
+let recoveryMode = false;
+const SB = (window.supabase && SB_ANON !== 'sb_publishable_xwSrDmDQ4GhM_Il-hFJs-w_ZdQNDJjg') ? window.supabase.createClient(SB_URL, SB_ANON, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' } }) : null;
 const ROLE_MAP = { guru: 'wali_kelas', siswa: 'siswa', bendahara: 'bendahara', pengelola: 'pengelola' }; /* 'wali_kelas' = peran Guru di kode lama */
 const isP = () => !!U && U.role === 'pengelola';
 const navKey = () => (isP() ? 'admin' : isT() ? 'teacher' : 'student');
@@ -747,7 +760,13 @@ function watchAuth() {
   if (authWatch || !SB) return; authWatch = true;
   setInterval(async () => { if (!U) return; const old = U.role, ok = await loadProfile(); if (ok === false) endSession('Akun Anda tidak lagi aktif.', 'err'); else if (ok && U.role !== old) { location.hash = isP() ? '#/akun' : '#/dash'; render(); } }, 60000);
   /* jangan memanggil API Supabase langsung di dalam callback ini (bisa deadlock): tunda dengan setTimeout */
-  SB.auth.onAuthStateChange((ev) => { if (ev === 'SIGNED_OUT' && U) setTimeout(() => { if (U) endSession('Sesi berakhir. Silakan masuk kembali.', 'err'); }, 0); });
+  SB.auth.onAuthStateChange((ev) => {
+    if (ev === 'PASSWORD_RECOVERY') {
+      recoveryMode = true;
+      setTimeout(() => render(), 0);
+    }
+    if (ev === 'SIGNED_OUT' && U) setTimeout(() => { if (U) endSession('Sesi berakhir. Silakan masuk kembali.', 'err'); }, 0);
+  });
   /* koneksi kembali normal: pulihkan sesi otomatis (layar gangguan saat boot, atau profil yang tertunda saat login) */
   window.addEventListener('online', () => { if (U || !SB) return; if (NETFAIL) bootSession(); else if (PROFILE_PENDING) retryProfile(); });
 }
@@ -799,6 +818,28 @@ function pPengaturan() {
     (isT() ? `<section class="card pad span2"><h2>Data demo</h2><p class="mut" style="margin-bottom:12px">Fitur kelas masih memakai data contoh di memori browser. Tombol di bawah mengembalikan data demo ke kondisi awal.</p><button class="btn sec" data-act="reset">Reset data demo</button></section>` : '') + '</div>';
 }
 document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'recoveryForm') {
+    e.preventDefault();
+    if (!SB) return showRecoveryError('Koneksi autentikasi belum dikonfigurasi. Hubungi pengelola situs.');
+    const f = new FormData(e.target), nw = String(f.get('nw') || ''), nw2 = String(f.get('nw2') || '');
+    if (nw.length < 12) return showRecoveryError('Password baru minimal 12 karakter.');
+    if (nw !== nw2) return showRecoveryError('Konfirmasi password tidak sama.');
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true; btn.textContent = 'MENYIMPAN…';
+    try {
+      const { error } = await SB.auth.updateUser({ password: nw });
+      if (error) { showRecoveryError(error.message || 'Gagal mengganti password. Minta tautan pemulihan baru jika tautan sudah kedaluwarsa.'); btn.disabled = false; btn.textContent = 'SIMPAN PASSWORD BARU'; return; }
+      recoveryMode = false;
+      await SB.auth.signOut();
+      U = null;
+      render();
+      toast('Password berhasil diperbarui. Silakan login dengan password baru.');
+    } catch (_) {
+      showRecoveryError('Tidak dapat terhubung ke server. Periksa koneksi lalu coba lagi.');
+      btn.disabled = false; btn.textContent = 'SIMPAN PASSWORD BARU';
+    }
+    return;
+  }
   const id = e.target.id; if (id !== 'rp' && id !== 'akf') return; e.preventDefault();
   const f = new FormData(e.target);
   if (id === 'rp') {
@@ -814,8 +855,9 @@ document.addEventListener('submit', async (e) => {
 });
 bootSession();
 const hasStored = !!SB && Object.keys(localStorage).some((k) => /^sb-.*-auth-token$/.test(k));
-if (!U && !hasStored) setHash('#/login');
-if (!hasStored) render();
+const recoveryInUrl = /(?:^|[&#])type=recovery(?:&|$)/.test(location.hash) || new URLSearchParams(location.search).get('type') === 'recovery';
+if (!U && !hasStored && !recoveryInUrl) setHash('#/login');
+if (!hasStored || recoveryInUrl) render();
 
 </script>
 </body>
