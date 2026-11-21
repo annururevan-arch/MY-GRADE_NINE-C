@@ -729,7 +729,7 @@ window.addEventListener('hashchange', () => { F._drawer = false; render(); });
 /* ---------- SUPABASE AUTH (nyata) ---------- */
 const SB_URL = 'https://tenyjlwfvbqushjjmjgo.supabase.co', SB_ANON = 'sb_publishable_xwSrDmDQ4GhM_Il-hFJs-w_ZdQNDJjg'; /* anon/publishable key SAJA. Jangan pernah isi service role key. */
 let recoveryMode = false;
-const SB = (window.supabase && typeof SB_ANON === 'string' && SB_ANON.startsWith('sb_publishable_')) ? window.supabase.createClient(SB_URL, SB_ANON, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' } }) : null;
+const SB = (window.supabase && typeof SB_ANON === 'string' && SB_ANON.trim().length > 0) ? window.supabase.createClient(SB_URL, SB_ANON.trim(), { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' } }) : null;
 const ROLE_MAP = { guru: 'wali_kelas', siswa: 'siswa', bendahara: 'bendahara', pengelola: 'pengelola' }; /* 'wali_kelas' = peran Guru di kode lama */
 const isP = () => !!U && U.role === 'pengelola';
 const navKey = () => (isP() ? 'admin' : isT() ? 'teacher' : 'student');
