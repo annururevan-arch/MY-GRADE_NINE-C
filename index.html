@@ -1184,15 +1184,16 @@ A.akresetdb = (d) => {
   const a = (ACC.rows || []).find((x) => x.id === d.id);
   if (!a || a.id === U.id) return toast('Akun tidak ditemukan atau tidak dapat direset.', 'err');
   modal('Atur ulang password?', `<p class="tx">Password akun <b>${esc(a.full_name || a.username)}</b> akan diganti. Password lama tidak akan berlaku lagi. Pastikan pemilik akun sudah menyetujui tindakan ini.</p><p class="mut">Password sementara baru akan ditampilkan satu kali setelah berhasil disimpan.</p>`, () => {
-    try {
-      SUMM.periods = (await sumQ(SB.from('summary_periods').select('*').order('start_date', { ascending: false }))) || [];
-      if (!SUMM.periods.some((x) => x.id === SUMM.pid)) SUMM.pid = sumPick(SUMM.periods);
-      if (isT()) await sumLoadTeacher(); else await sumLoadStudent();
-      SUMM.loaded = true;
-    } catch (e) { SUMM.err = sumMsg(e); }
-    SUMM.loading = false; if (U && U.id === uid && (cur === 'summary' || cur === 'dash')) re();
-  })();
-}
+    if (ACC.resetBusy) return 'Sedang memproses reset password.';
+    ACC.resetBusy = true;
+    const password = genPw(20);
+    callFn('reset_password', { id: a.id, password }).then((r) => {
+      ACC.resetBusy = false;
+      if (!r.ok) return toast(r.msg, 'err');
+      credModal('Password berhasil diatur ulang', 'Sampaikan password sementara ini secara langsung kepada pemilik akun. Setelah masuk, pemilik akun sebaiknya menggantinya melalui pengaturan password.', [{ name: a.full_name || a.username, email: a.username, pw: password }]);
+    }).catch(() => { ACC.resetBusy = false; toast('Reset password gagal. Coba lagi.', 'err'); });
+  }, 'Atur ulang password', true);
+};
 async function sumLoadStudent() {
   const [en, mk] = await Promise.all([sumQ(SB.from('summary_entries').select('period_id,story_no').eq('student_id', U.id)), sumQ(SB.from('summary_marks').select('period_id,collected,reviewed,reviewed_at').eq('student_id', U.id))]);
   SUMM.mine = {}; (en || []).forEach((x) => { (SUMM.mine[x.period_id] = SUMM.mine[x.period_id] || []).push(+x.story_no); });
