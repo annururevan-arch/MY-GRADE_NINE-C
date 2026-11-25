@@ -1163,10 +1163,20 @@ function accLoad() { if (ACC.busy) return; ACC.busy = true; callFn('list', {}).t
 function pAkun() {
   if (!isP()) return '';
   if (ACC.rows === null) accLoad();
-  const RL = { guru: 'Guru', siswa: 'Siswa', bendahara: 'Bendahara', pengelola: 'Pengelola' }, rows = ACC.rows || [];
+  const RL = { guru: 'Guru', siswa: 'Siswa', bendahara: 'Bendahara', pengelola: 'Pengelola' };
+  const rows = ACC.rows || [];
+  const accountRows = rows.map((a) => {
+    const actions = a.id === U.id ? '—' : `<div class="ac" style="gap:6px;flex-wrap:wrap"><button class="btn sec sm" data-act="akresetdb" data-id="${esc(a.id)}" aria-label="Atur ulang password ${esc(a.full_name || a.username)}">Atur ulang password</button><button class="btn sec sm" data-act="aktog" data-id="${esc(a.id)}" data-on="${a.is_active === false ? 0 : 1}">${a.is_active === false ? 'Aktifkan' : 'Nonaktifkan'}</button></div>`;
+    return `<tr><td><code>${esc(a.username)}</code></td><td><b>${esc(a.full_name || '')}</b></td><td>${RL[a.role] || esc(a.role)}</td><td>${a.is_active === false ? 'Nonaktif' : 'Aktif'}</td><td>${actions}</td></tr>`;
+  });
+  const accountList = ACC.rows === null
+    ? '<p class="mut">Memuat…</p>'
+    : rows.length
+      ? tbl(['Username', 'Nama', 'Peran', 'Status', 'Aksi'], accountRows)
+      : '<p class="mut">Belum ada akun.</p>';
   return hd('Manajemen Akun', 'Buat dan kelola akun pengguna. Hanya Pengelola yang dapat membuka halaman ini.') +
     `<section class="card pad"><h2>${ic('plus')}Buat akun baru</h2><form id="akf" novalidate>${fld('Username', 'username', { req: true, max: 32, hint: '3–32 karakter: huruf kecil, angka, titik, garis bawah, strip.' })}${fld('Nama lengkap', 'full_name', { req: true, max: 100 })}${fld('Peran', 'role', { opts: [['siswa', 'Siswa'], ['bendahara', 'Bendahara'], ['guru', 'Guru'], ['pengelola', 'Pengelola']] })}${fld('Password awal', 'password', { type: 'password', req: true, hint: 'Minimal 12 karakter.' })}<button class="btn pri" type="submit">Buat akun</button></form></section>` +
-    `<section class="card pad" style="margin-top:14px"><h2>Daftar akun</h2>${ACC.rows === null ? '<p class="mut">Memuat…</p>' : rows.length ? tbl(['Username', 'Nama', 'Peran', 'Status', 'Aksi'], rows.map((a) => `<tr><td><code>${esc(a.username)}</code></td><td><b>${esc(a.full_name || '')}</b></td><td>${RL[a.role] || esc(a.role)}</td><td>${a.is_active === false ? 'Nonaktif' : 'Aktif'}</td><td>\${a.id === U.id ? '—' : \`<div class="ac" style="gap:6px;flex-wrap:wrap"><button class="btn sec sm" data-act="akresetdb" data-id="\${esc(a.id)}" aria-label="Atur ulang password \${esc(a.full_name || a.username)}">Atur ulang password</button><button class="btn sec sm" data-act="aktog" data-id="\${esc(a.id)}" data-on="\${a.is_active === false ? 0 : 1}">\${a.is_active === false ? 'Aktifkan' : 'Nonaktifkan'}</button></div>\`}</td></tr>`)) : '<p class="mut">Belum ada akun.</p>'}</section>`;
+    `<section class="card pad" style="margin-top:14px"><h2>Daftar akun</h2>${accountList}</section>`;
 }
 A.aktog = (d) => { callFn('set_active', { id: d.id, active: d.on !== '1' }).then((r) => { if (!r.ok) return toast(r.msg, 'err'); ACC.rows = null; re(); if (r.data && r.data.warning) toast(r.data.warning); }); };
 A.akresetdb = (d) => {
