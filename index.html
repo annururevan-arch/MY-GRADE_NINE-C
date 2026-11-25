@@ -808,6 +808,15 @@ function pAsas() {
     '<div class="grid g2">' + schedule + '</div>' +
     '<section class="card pad" style="margin-top:14px"><div class="ac" style="justify-content:space-between;gap:10px;flex-wrap:wrap"><div><h2>' + ic('book') + 'Rangkuman per Materi</h2><p class="mut">Materi tersimpan di Supabase dan dapat dibuka dari perangkat lain.</p></div>' + (canEdit ? '<button class="btn sec" type="button" data-act="asasreload">Muat ulang</button>' : '') + '</div>' + materials + '</section>';
 }
+function pPengaturan() {
+  const role = roleText();
+  return hd('Pengaturan', 'Informasi akun dan pengaturan akses.') +
+    `<section class="card pad"><h2>Informasi akun</h2>
+      <p class="mut">Nama akun</p><p><b>${esc(U && U.name || '—')}</b></p>
+      <p class="mut" style="margin-top:10px">Peran</p><p><b>${esc(role || '—')}</b></p>
+      <p class="tip" style="margin-top:14px">Untuk perubahan data akun atau bantuan pengaturan password, hubungi Pengelola kelas.</p>
+    </section>`;
+}
 const pages = { dash: pDash, profil: pProfil, struktur: pStruktur, jadwal: pJadwal, galeri: pGaleri, album: pAlbum, summary: pSummary, asas: pAsas, bta: pBta, kas: pKas, izin: pIzin, siswa: pSiswa, pengumuman: pPengumuman, pengaturan: pPengaturan, akun: pAkun };
 
 function render() {
