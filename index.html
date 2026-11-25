@@ -1183,59 +1183,7 @@ A.akresetdb = (d) => {
   if (!isP()) return deny();
   const a = (ACC.rows || []).find((x) => x.id === d.id);
   if (!a || a.id === U.id) return toast('Akun tidak ditemukan atau tidak dapat direset.', 'err');
-  modal('Atur ulang password?', \`<p class="tx">Password akun <b>\${esc(a.full_name || a.username)}</b> akan diganti. Password lama tidak akan berlaku lagi. Pastikan pemilik akun sudah menyetujui tindakan ini.</p><p class="mut">Password sementara baru akan ditampilkan satu kali setelah berhasil disimpan.</p>\`, () => {
-    if (ACC.resetBusy) return 'Sedang memproses reset password.';
-    ACC.resetBusy = true;
-    const password = genPw(20);
-    callFn('reset_password', { id: a.id, password }).then((r) => {
-      ACC.resetBusy = false;
-      if (!r.ok) return toast(r.msg, 'err');
-      credModal('Password berhasil diatur ulang', 'Sampaikan password sementara ini secara langsung kepada pemilik akun. Setelah masuk, pemilik akun sebaiknya menggantinya melalui pengaturan password.', [{ name: a.full_name || a.username, email: a.username, pw: password }]);
-    }).catch(() => { ACC.resetBusy = false; toast('Reset password gagal. Coba lagi.', 'err'); });
-  }, 'Atur ulang password', true);
-};
-function pPengaturan() {
-  const RL = { wali_kelas: 'Guru', siswa: 'Siswa', bendahara: 'Bendahara', pengelola: 'Pengelola' };
-  return hd('Pengaturan', 'Akun Anda.') + `<div class="grid g2"><section class="card pad"><h2>Profil akun</h2><p><span class="mut">Nama:</span> <b>${esc(U.name)}</b></p><p><span class="mut">Username:</span> ${esc(U.username || '—')}</p><p><span class="mut">Peran:</span> ${RL[U.role]}</p><p class="hint">Nama dan peran dikelola oleh Pengelola dan tidak dapat diubah sendiri.</p></section>
-  <section class="card pad"><h2>Ganti password</h2><form id="rp" novalidate>${fld('Password baru', 'nw', { type: 'password', req: true, hint: 'Minimal 12 karakter.' })}${fld('Ulangi password baru', 'nw2', { type: 'password', req: true })}<button class="btn pri" type="submit">Simpan password</button></form></section>` +
-    (isT() ? `<section class="card pad span2"><h2>Data demo</h2><p class="mut" style="margin-bottom:12px">Fitur kelas masih memakai data contoh di memori browser. Tombol di bawah mengembalikan data demo ke kondisi awal.</p><button class="btn sec" data-act="reset">Reset data demo</button></section>` : '') + '</div>';
-}
-document.addEventListener('submit', async (e) => {
-  const id = e.target.id; if (id !== 'rp' && id !== 'akf') return; e.preventDefault();
-  const f = new FormData(e.target);
-  if (id === 'rp') {
-    if (!U || !SB) return; const nw = f.get('nw');
-    if (nw.length < 12) return toast('Password baru minimal 12 karakter.', 'err'); if (nw !== f.get('nw2')) return toast('Konfirmasi password tidak sama.', 'err');
-    const { error } = await SB.auth.updateUser({ password: nw }); if (error) return toast(error.code === 'same_password' ? 'Password baru harus berbeda dari yang lama.' : error.code === 'weak_password' ? 'Password terlalu lemah.' : 'Gagal mengganti password.', 'err'); e.target.reset(); toast('Password berhasil diganti.');
-  } else {
-    if (!isP()) return deny(); const pw = f.get('password');
-    if (pw.length < 12) return toast('Password awal minimal 12 karakter.', 'err');
-    const r = await callFn('create', { username: f.get('username').trim().toLowerCase(), full_name: f.get('full_name').trim(), role: f.get('role'), password: pw });
-    if (!r.ok) return toast(r.msg, 'err'); e.target.reset(); ACC.rows = null; re(); toast('Akun berhasil dibuat.');
-  }
-});
-/* ---------- SUMMARY BOOK (Supabase: summary_periods / summary_entries / summary_marks) ---------- */
-const STORIES = ["Ibn Sina (Avicenna)", "Al-Khwarizmi (I)", "Ibn Al-Haytham (I)", "Jabir ibn Hayyan", "Al-Biruni (I)", "Al-Idrisi (I)", "Al-Zahrawi", "Ibn Khaldun (I)", "Abbas Ibn Firnas", "Omar Khayyam", "Al-Kindi (I)", "Nasir al-Din al-Tusi", "Ibn Nafis", "Al-Jazari", "Fatima al-Fihri", "Maryam al-Asturlabi", "Banu Musa Brothers", "Thabit ibn Qurra", "Al-Masudi (I)", "Sufi al-Marwazi", "Al-Battani", "Ibn Yunus", "Al-Zarqali", "Ibn Baja (Avempace)", "Ibn Tufail", "Ibn Rushd (Averroes)", "Al-Ghazali", "Ibn Zuhr (Avenzoar)", "Al-Razi (Rhazes)", "Hunayn ibn Ishaq", "Al-Biruni (II)", "Ibn al-Haytham (II)", "Al-Kashi", "Ulugh Beg", "Ibn Ishaq al-Kindi", "Jabir ibn Hayyan", "Al-Majriti", "Ibn al-Banna al-Marrakushi", "Al-Nayrizi", "Abu Kamil Shuja", "Al-Khwarizmi part 2 (II)", "Ibn Firnas", "Al-Farabi", "Ibn Khaldun (II)", "Al-Masudi (II)", "Ibn al-Jazzar", "Al-Zahrawi (Albucasis)", "Ibn al-Shatir", "Sharaf al-Dīn al-Tūsī", "Kamāl al-Dīn al-Fārisī", "Al-Jahiz", "Ibn al-Awwam", "Al-Dinawari", "Ibn Bajjah (Avempace)", "Al-Maqrizi", "Ibn Said al-Maghribi", "Al-Qalasadi", "Ibn al-Wardi", "Al-Idrisi (II)", "Yaqut al-Hamawi", "Al-Sijzi", "Ibn al-Haytham (Alhazen) (III)", "Al-Karaji", "Al-Samawal al-Maghribi", "Ibn al-Banna", "Al-Qushayri", "Ibn Miskawayh", "Al-Tawhidi", "Ibn al-Rumi", "Al-Hamadhani"];
-const SUMS = new Set(['sumpick', 'sumdrop', 'sumsave']), SUMB = new Set(['sumreload', 'sumhist', 'sumview']); /* SUMS: siswa/bendahara; SUMB: siswa+guru; aksi lain: guru */
-const sumInit = () => ({ uid: null, loaded: false, loading: false, busy: false, err: '', periods: [], pid: null, mine: {}, marks: {}, draft: new Set(), rows: [], overview: [], view: 'main' });
-const SUMM = sumInit();
-const sumReset = () => Object.assign(SUMM, sumInit(), { uid: U ? U.id : null });
-const SUM_ERR = { forbidden: 'Anda tidak memiliki akses untuk aksi ini.', locked: 'Sudah diperiksa guru, tidak dapat diubah. Hubungi guru jika perlu perbaikan.', too_many: 'Maksimal 5 cerita per minggu.', bad_story: 'Nomor cerita tidak valid.', period_not_found: 'Periode tidak ditemukan.', no_entries: 'Siswa belum mencatat cerita, belum bisa ditandai diperiksa.', not_found: 'Data siswa tidak ditemukan.' };
-const sumMsg = (e) => SUM_ERR[e && e.message] || (e && e.code === '23P01' ? 'Periode bertumpuk dengan periode lain.' : e && e.code === '23505' ? 'Tanggal mulai tersebut sudah dipakai periode lain.' : e && e.code === '23514' ? 'Data periode tidak valid (periksa tanggal).' : 'Terjadi kesalahan. Periksa koneksi lalu coba lagi.');
-const sumQ = async (p) => { const r = await p; if (r.error) throw r.error; return r.data; };
-const jktToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
-const fdw = (s) => (s ? new Intl.DateTimeFormat('id-ID', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(s + 'T00:00:00Z')) : '—');
-const sumNorm = (s) => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-const sumStatus = (n, rev) => (rev ? 'Sudah Diperiksa' : n >= 3 ? 'Lengkap' : n >= 1 ? 'Belum Lengkap' : 'Belum Mengumpulkan');
-const SUM_TONE = { 'Sudah Diperiksa': 'navy', Lengkap: 'ok', 'Belum Lengkap': 'warn', 'Belum Mengumpulkan': 'mute' };
-const sumBadge = (n, rev) => { const t = sumStatus(n, rev); return bd(t, SUM_TONE[t]); };
-const sumCur = () => SUMM.periods.find((x) => x.id === SUMM.pid) || null;
-const sumStoryLine = (n) => `<div class="ssl"><b>${n}.</b> ${esc(STORIES[n - 1])}</div>`;
-function sumPick(per) { const t = jktToday(); return (per.find((x) => x.start_date <= t && t <= x.end_date) || per.find((x) => x.start_date <= t) || per[0] || {}).id || null; }
-function sumLoad(force) {
-  if (!SB || !U || SUMM.loading || (SUMM.loaded && !force)) return;
-  SUMM.loading = true; SUMM.err = ''; const uid = U.id;
-  (async () => {
+  modal('Atur ulang password?', `<p class="tx">Password akun <b>${esc(a.full_name || a.username)}</b> akan diganti. Password lama tidak akan berlaku lagi. Pastikan pemilik akun sudah menyetujui tindakan ini.</p><p class="mut">Password sementara baru akan ditampilkan satu kali setelah berhasil disimpan.</p>`, () => {
     try {
       SUMM.periods = (await sumQ(SB.from('summary_periods').select('*').order('start_date', { ascending: false }))) || [];
       if (!SUMM.periods.some((x) => x.id === SUMM.pid)) SUMM.pid = sumPick(SUMM.periods);
