@@ -687,13 +687,126 @@ const ASAS_DAYS = [
   { day:'Rabu', date:'2 Desember 2026', items:[['07.30–09.30','IPA'],['10.00–11.15','Informatika']] },
   { day:'Kamis', date:'3 Desember 2026', items:[['07.30–09.30','Matematika'],['10.00–11.15','Bahasa Jawa']] }
 ];
+const ASAS_SUBJECTS = ['Al-Islam','Kemuhammadiyahan','Bahasa Indonesia','Bahasa Arab','Bahasa Inggris','Pendidikan Pancasila','IPS','Prakarya','PJOK','IPA','Informatika','Matematika','Bahasa Jawa'];
+const ASASM = { uid: null, loaded: false, loading: false, err: '', rows: [] };
+function asasReset() { Object.assign(ASASM, { uid: U ? U.id : null, loaded: false, loading: false, err: '', rows: [] }); }
+async function asasLoad(force) {
+  if (!SB || !U || ASASM.loading || (ASASM.loaded && !force)) return;
+  if (ASASM.uid !== U.id) asasReset();
+  ASASM.loading = true; ASASM.err = '';
+  const uid = U.id;
+  try {
+    const q = await SB.from('asas_materials').select('*').order('subject', { ascending: true }).order('created_at', { ascending: false });
+    if (q.error) throw q.error;
+    ASASM.rows = q.data || [];
+    await Promise.all(ASASM.rows.map(async (row) => {
+      if (!row.file_path) return;
+      const signed = await SB.storage.from('asas-materi').createSignedUrl(row.file_path, 3600);
+      row.signed_url = signed.error ? '' : signed.data.signedUrl;
+    }));
+    ASASM.loaded = true;
+  } catch (e) {
+    console.error('ASAS materials:', e);
+    ASASM.err = 'Materi belum dapat dimuat. Periksa koneksi, tabel, dan izin Supabase, lalu coba lagi.';
+  } finally {
+    ASASM.loading = false;
+    if (U && U.id === uid && cur === 'asas') re();
+  }
+}
+function asasEditor(subject, row) {
+  if (!isT() && !isP()) return deny();
+  const editing = !!row;
+  const body = fld('Mata pelajaran', 'subject', { v: subject || (row && row.subject) || ASAS_SUBJECTS[0], opts: ASAS_SUBJECTS.map((x) => [x, x]) }) +
+    fld('Judul rangkuman', 'title', { v: row ? row.title : '', req: true, max: 160 }) +
+    fld('Isi rangkuman', 'content', { v: row ? row.content : '', rows: 8, max: 20000, hint: 'Ketik rangkuman materi di sini. PDF boleh ditambahkan sebagai lampiran.' }) +
+    '<div class="fld"><label class="lb" for="asas-pdf">Lampiran PDF (opsional, maksimal 10 MB)</label><input id="asas-pdf" name="pdf" type="file" accept="application/pdf,.pdf">' +
+    (row && row.file_name ? '<p class="hint">PDF saat ini: ' + esc(row.file_name) + '</p><label class="ac" style="margin-top:8px"><input type="checkbox" name="remove_file" value="1"> Hapus lampiran PDF saat menyimpan</label>' : '') + '</div>';
+  const el = document.createElement('div'); el.className = 'ov';
+  el.innerHTML = '<div class="dlg" role="dialog" aria-modal="true" aria-label="' + (editing ? 'Edit rangkuman' : 'Tambah rangkuman') + '"><div class="dh" style="display:flex;justify-content:space-between;align-items:flex-start"><h2>' + (editing ? 'Edit Rangkuman Materi' : 'Tambah Rangkuman Materi') + '</h2><button type="button" class="ib" data-x aria-label="Tutup">' + ic('x') + '</button></div><form>' + body + '<div class="df"><button type="button" class="btn sec" data-x>Batal</button><button class="btn pri" type="submit">Simpan</button></div></form></div>';
+  el.addEventListener('mousedown', (e) => { if (e.target === el) el.remove(); });
+  el.addEventListener('click', (e) => { if (e.target.closest('[data-x]')) el.remove(); });
+  const form = el.querySelector('form');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn.disabled) return;
+    const fd = new FormData(form), title = String(fd.get('title') || '').trim(), content = String(fd.get('content') || '').trim();
+    const file = form.querySelector('input[name="pdf"]').files[0] || null;
+    const removeFile = fd.get('remove_file') === '1';
+    if (!title) return toast('Judul rangkuman wajib diisi.', 'err');
+    if (!content && !file && !(row && row.file_path && !removeFile)) return toast('Isi rangkuman atau lampirkan PDF terlebih dahulu.', 'err');
+    if (file && (file.type !== 'application/pdf' || file.size > 10 * 1024 * 1024)) return toast('File harus PDF dan ukurannya maksimal 10 MB.', 'err');
+    btn.disabled = true; btn.textContent = 'Menyimpan…';
+    let newPath = null;
+    try {
+      let filePath = row ? row.file_path : null, fileName = row ? row.file_name : null, fileSize = row ? row.file_size : null;
+      if (removeFile) { filePath = null; fileName = null; fileSize = null; }
+      if (file) {
+        newPath = U.id + '/' + crypto.randomUUID() + '.pdf';
+        const up = await SB.storage.from('asas-materi').upload(newPath, file, { contentType: 'application/pdf', upsert: false });
+        if (up.error) throw up.error;
+        filePath = newPath; fileName = file.name; fileSize = file.size;
+      }
+      const payload = { subject: String(fd.get('subject')), title, content, file_path: filePath, file_name: fileName, file_size: fileSize, updated_by: U.id };
+      let saved;
+      if (editing) saved = await SB.from('asas_materials').update(payload).eq('id', row.id).select().single();
+      else saved = await SB.from('asas_materials').insert({ ...payload, created_by: U.id }).select().single();
+      if (saved.error) throw saved.error;
+      if (row && row.file_path && row.file_path !== filePath) {
+        const rm = await SB.storage.from('asas-materi').remove([row.file_path]);
+        if (rm.error) console.warn('Lampiran lama belum terhapus:', rm.error);
+      }
+      el.remove();
+      await asasLoad(true);
+      toast(editing ? 'Rangkuman berhasil diperbarui.' : 'Rangkuman berhasil ditambahkan.');
+    } catch (err) {
+      if (newPath) { try { await SB.storage.from('asas-materi').remove([newPath]); } catch (_) {} }
+      console.error('Simpan ASAS:', err);
+      btn.disabled = false; btn.textContent = 'Simpan';
+      toast('Gagal menyimpan rangkuman. Periksa izin Supabase dan koneksi, lalu coba lagi.', 'err');
+    }
+  });
+  document.body.appendChild(el);
+  const first = el.querySelector('input:not([type=file]),select,textarea'); if (first) first.focus();
+}
+async function asasDeleteRun(id) {
+  const row = ASASM.rows.find((x) => String(x.id) === String(id));
+  if (!row) return;
+  try {
+    const del = await SB.from('asas_materials').delete().eq('id', row.id);
+    if (del.error) throw del.error;
+    if (row.file_path) {
+      const rm = await SB.storage.from('asas-materi').remove([row.file_path]);
+      if (rm.error) console.warn('Lampiran materi tidak terhapus dari Storage:', rm.error);
+    }
+    await asasLoad(true);
+    toast('Rangkuman berhasil dihapus.');
+  } catch (e) {
+    console.error('Hapus ASAS:', e);
+    toast('Gagal menghapus rangkuman. Periksa izin Supabase.', 'err');
+  }
+}
 function pAsas() {
   const schedule = ASAS_DAYS.map((d, i) => `<section class="card pad" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px"><div><h2>${esc(d.day)}</h2><p class="mut">${esc(d.date)}</p></div><span class="badge">Hari ${i+1}</span></div>${d.items.map(([t, m]) => `<div class="lgl" style="align-items:center"><b style="min-width:112px;color:var(--navy)">${t}</b><span>${esc(m)}</span></div>`).join('')}</section>`).join('');
-  const subjects = ['Al-Islam','Kemuhammadiyahan','Bahasa Indonesia','Bahasa Arab','Bahasa Inggris','Pendidikan Pancasila','IPS','Prakarya','PJOK','IPA','Informatika','Matematika','Bahasa Jawa'];
+  if (ASASM.uid !== (U && U.id)) asasReset();
+  if (SB && U && !ASASM.loaded && !ASASM.loading && !ASASM.err) asasLoad();
+  const canEdit = isT() || isP();
+  let materials = '';
+  if (!SB) materials = '<div class="note">Supabase belum tersedia. Rangkuman Materi belum dapat dimuat.</div>';
+  else if (ASASM.loading && !ASASM.loaded) materials = '<div class="note">Memuat rangkuman materi…</div>';
+  else if (ASASM.err) materials = '<div class="note"><p>' + esc(ASASM.err) + '</p><button class="btn sec" type="button" data-act="asasreload">Coba lagi</button></div>';
+  else materials = '<div class="grid g2" style="margin-top:12px">' + ASAS_SUBJECTS.map((subject) => {
+    const rows = ASASM.rows.filter((x) => x.subject === subject);
+    const cards = rows.length ? rows.map((row) => '<article class="note" style="margin-top:8px"><div class="ac" style="justify-content:space-between;gap:8px;flex-wrap:wrap"><b>' + esc(row.title) + '</b>' +
+      (canEdit ? '<span class="ac"><button class="btn sec sm" type="button" data-act="asasedit" data-id="' + esc(row.id) + '">Edit</button><button class="btn bad sm" type="button" data-act="asasdel" data-id="' + esc(row.id) + '">Hapus</button></span>' : '') +
+      '</div>' + (row.content ? '<p style="white-space:pre-wrap;margin-top:8px">' + esc(row.content) + '</p>' : '') +
+      (row.file_path ? (row.signed_url ? '<button class="btn sec sm" style="margin-top:8px" type="button" data-act="asasfile" data-id="' + esc(row.id) + '">Buka PDF · ' + esc(row.file_name || 'Lampiran') + '</button>' : '<p class="hint">Lampiran PDF tidak dapat dibuka saat ini.</p>') : '') + '</article>').join('') : '<p class="mut" style="margin-top:8px">Belum ada rangkuman materi.</p>';
+    return '<section class="card pad"><div class="ac" style="justify-content:space-between;gap:8px"><h3>' + esc(subject) + '</h3>' + (canEdit ? '<button class="btn pri sm" type="button" data-act="asasadd" data-subject="' + esc(subject) + '">+ Tambah</button>' : '') + '</div>' + cards + '</section>';
+  }).join('') + '</div>';
   return hd('Menu ASAS', 'Asesmen Sumatif Akhir Semester Ganjil · Tahun Ajaran 2026/2027') +
-    `<section class="card pad" style="margin-bottom:14px"><div class="ac" style="justify-content:space-between;flex-wrap:wrap"><div><h2>${ic('calendar')}Jadwal ASAS Ganjil</h2><p class="mut">27 November–3 Desember 2026 · SMP Muhammadiyah 1 Gombong</p></div><span class="badge">13 mata pelajaran</span></div><p class="tip" style="margin-top:10px">Gunakan jadwal resmi dari sekolah sebagai acuan. Perhatikan tanggal dan waktu setiap mata pelajaran.</p></section>
-    <div class="grid g2">${schedule}</div>
-    <section class="card pad" style="margin-top:14px"><h2>${ic('book')}Rangkuman per Materi</h2><p class="mut">Daftar mata pelajaran untuk rangkuman ASAS. Isi rangkuman akan ditambahkan berdasarkan kisi-kisi atau materi resmi dari guru agar tidak ada materi yang keliru.</p><div class="grid g2" style="margin-top:12px">${subjects.map((x) => `<div class="note" style="display:flex;align-items:center;gap:9px"><span style="color:var(--soft)">${ic('book-open')}</span><b>${esc(x)}</b><small class="mut" style="margin-left:auto">Menunggu materi</small></div>`).join('')}</div></section>`;
+    '<section class="card pad" style="margin-bottom:14px"><div class="ac" style="justify-content:space-between;flex-wrap:wrap"><div><h2>' + ic('calendar') + 'Jadwal ASAS Ganjil</h2><p class="mut">27 November–3 Desember 2026 · SMP Muhammadiyah 1 Gombong</p></div><span class="badge">13 mata pelajaran</span></div><p class="tip" style="margin-top:10px">Gunakan jadwal resmi dari sekolah sebagai acuan. Perhatikan tanggal dan waktu setiap mata pelajaran.</p></section>' +
+    '<div class="grid g2">' + schedule + '</div>' +
+    '<section class="card pad" style="margin-top:14px"><div class="ac" style="justify-content:space-between;gap:10px;flex-wrap:wrap"><div><h2>' + ic('book') + 'Rangkuman per Materi</h2><p class="mut">Materi tersimpan di Supabase dan dapat dibuka dari perangkat lain.</p></div>' + (canEdit ? '<button class="btn sec" type="button" data-act="asasreload">Muat ulang</button>' : '') + '</div>' + materials + '</section>';
 }
 const pages = { dash: pDash, profil: pProfil, struktur: pStruktur, jadwal: pJadwal, galeri: pGaleri, album: pAlbum, summary: pSummary, asas: pAsas, bta: pBta, kas: pKas, izin: pIzin, siswa: pSiswa, pengumuman: pPengumuman, pengaturan: pPengaturan, akun: pAkun };
 
@@ -763,6 +876,11 @@ const A = {
   anedit(d) { const a = annFind(d.id); if (a) anForm(a); },
   andel(d) { const a = annFind(d.id); if (!a) return; confirmBox('Hapus pengumuman?', `"${a.title}" akan dihapus permanen.`, () => { annWrite(() => annDel(a.id), 'menghapus pengumuman', 'Pengumuman dihapus.'); }); },
   anpin(d) { const a = annFind(d.id); if (!a) return; annWrite(() => annUpd(a.id, { is_pinned: !a.is_pinned }), 'mengubah sematan', a.is_pinned ? 'Sematan dilepas.' : 'Pengumuman disematkan.'); },
+  asasadd(d) { asasEditor(d.subject, null); },
+  asasedit(d) { const row = ASASM.rows.find((x) => String(x.id) === String(d.id)); if (row) asasEditor(row.subject, row); },
+  asasdel(d) { const row = ASASM.rows.find((x) => String(x.id) === String(d.id)); if (!row) return; modal('Hapus rangkuman?', '<p class="tx">Rangkuman "' + esc(row.title) + '" akan dihapus.</p>', () => { asasDeleteRun(row.id); }, 'Hapus', true); },
+  asasreload() { ASASM.err = ''; asasLoad(true); },
+  asasfile(d) { const row = ASASM.rows.find((x) => String(x.id) === String(d.id)); if (row && row.signed_url) window.open(row.signed_url, '_blank', 'noopener'); },
   annreload() { ANN.err = ''; ANN.loading = false; annLoad(); re(); },
 };
 /* ---------- LOGIN, SESI, MANAJEMEN AKUN ---------- */
@@ -948,8 +1066,8 @@ function openLb(id, i) {
 }
 
 /* ---------- event global ---------- */
-const ANN_ACT = new Set(['anadd', 'anedit', 'andel', 'anpin']), ANY = new Set(['nav', 'drawer', 'logout', 'lb', 'annreload']), KAS = new Set(['kasadd', 'kasedit', 'kasdel']);
-function allowed(act) { if (act === 'pwtog') return true; if (!U) return false; if (ANY.has(act)) return true; if (PADM.has(act)) return isP(); if (ANN_ACT.has(act)) return isT() || isP(); if (isP()) return false; if (SUMB.has(act)) return true; if (SUMS.has(act)) return !isT(); if (KAS.has(act)) return canKas(); if (act === 'izme') return !isT(); return isT(); }
+const ANN_ACT = new Set(['anadd', 'anedit', 'andel', 'anpin']), ANY = new Set(['nav', 'drawer', 'logout', 'lb', 'annreload', 'asasfile']), ASAS_EDIT = new Set(['asasadd', 'asasedit', 'asasdel', 'asasreload']), KAS = new Set(['kasadd', 'kasedit', 'kasdel']);
+function allowed(act) { if (act === 'pwtog') return true; if (!U) return false; if (ANY.has(act)) return true; if (PADM.has(act)) return isP(); if (ANN_ACT.has(act) || ASAS_EDIT.has(act)) return isT() || isP(); if (isP()) return false; if (SUMB.has(act)) return true; if (SUMS.has(act)) return !isT(); if (KAS.has(act)) return canKas(); if (act === 'izme') return !isT(); return isT(); }
 document.addEventListener('click', (e) => {
   const a = e.target.closest('[data-act]'); if (!a) return;
   const fn = A[a.dataset.act]; if (fn && !allowed(a.dataset.act)) { deny(); return; } if (fn) { try { fn(a.dataset, a, e); } catch (err) { console.error(err); toast('Terjadi kesalahan pada preview.', 'err'); } }
