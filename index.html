@@ -1103,7 +1103,7 @@ const SB = (!SB_KEY_BAD && window.supabase && SB_ANON !== 'ISI_ANON_KEY_DI_SINI'
 const ROLE_MAP = { guru: 'wali_kelas', siswa: 'siswa', bendahara: 'bendahara', pengelola: 'pengelola' }; /* 'wali_kelas' = peran Guru di kode lama */
 const isP = () => !!U && U.role === 'pengelola';
 const navKey = () => (isP() ? 'admin' : isT() ? 'teacher' : 'student');
-const PADM = new Set(['aktog']);
+const PADM = new Set(['aktog', 'akresetdb']);
 const isNet = (e) => !!e && (e.name === 'AuthRetryableFetchError' || !e.status || e.status >= 500);
 function wipeLocalAuth() { try { Object.keys(localStorage).filter((k) => /^sb-.*-auth-token/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch (_) {} }
 /* true = profil valid | false = sesi/akun TIDAK valid | null = gangguan jaringan/server (jangan logout) */
@@ -1166,9 +1166,24 @@ function pAkun() {
   const RL = { guru: 'Guru', siswa: 'Siswa', bendahara: 'Bendahara', pengelola: 'Pengelola' }, rows = ACC.rows || [];
   return hd('Manajemen Akun', 'Buat dan kelola akun pengguna. Hanya Pengelola yang dapat membuka halaman ini.') +
     `<section class="card pad"><h2>${ic('plus')}Buat akun baru</h2><form id="akf" novalidate>${fld('Username', 'username', { req: true, max: 32, hint: '3–32 karakter: huruf kecil, angka, titik, garis bawah, strip.' })}${fld('Nama lengkap', 'full_name', { req: true, max: 100 })}${fld('Peran', 'role', { opts: [['siswa', 'Siswa'], ['bendahara', 'Bendahara'], ['guru', 'Guru'], ['pengelola', 'Pengelola']] })}${fld('Password awal', 'password', { type: 'password', req: true, hint: 'Minimal 12 karakter.' })}<button class="btn pri" type="submit">Buat akun</button></form></section>` +
-    `<section class="card pad" style="margin-top:14px"><h2>Daftar akun</h2>${ACC.rows === null ? '<p class="mut">Memuat…</p>' : rows.length ? tbl(['Username', 'Nama', 'Peran', 'Status', 'Aksi'], rows.map((a) => `<tr><td><code>${esc(a.username)}</code></td><td><b>${esc(a.full_name || '')}</b></td><td>${RL[a.role] || esc(a.role)}</td><td>${a.is_active === false ? 'Nonaktif' : 'Aktif'}</td><td>${a.id === U.id ? '—' : `<button class="btn sec sm" data-act="aktog" data-id="${esc(a.id)}" data-on="${a.is_active === false ? 0 : 1}">${a.is_active === false ? 'Aktifkan' : 'Nonaktifkan'}</button>`}</td></tr>`)) : '<p class="mut">Belum ada akun.</p>'}</section>`;
+    `<section class="card pad" style="margin-top:14px"><h2>Daftar akun</h2>${ACC.rows === null ? '<p class="mut">Memuat…</p>' : rows.length ? tbl(['Username', 'Nama', 'Peran', 'Status', 'Aksi'], rows.map((a) => `<tr><td><code>${esc(a.username)}</code></td><td><b>${esc(a.full_name || '')}</b></td><td>${RL[a.role] || esc(a.role)}</td><td>${a.is_active === false ? 'Nonaktif' : 'Aktif'}</td><td>\${a.id === U.id ? '—' : \`<div class="ac" style="gap:6px;flex-wrap:wrap"><button class="btn sec sm" data-act="akresetdb" data-id="\${esc(a.id)}" aria-label="Atur ulang password \${esc(a.full_name || a.username)}">Atur ulang password</button><button class="btn sec sm" data-act="aktog" data-id="\${esc(a.id)}" data-on="\${a.is_active === false ? 0 : 1}">\${a.is_active === false ? 'Aktifkan' : 'Nonaktifkan'}</button></div>\`}</td></tr>`)) : '<p class="mut">Belum ada akun.</p>'}</section>`;
 }
 A.aktog = (d) => { callFn('set_active', { id: d.id, active: d.on !== '1' }).then((r) => { if (!r.ok) return toast(r.msg, 'err'); ACC.rows = null; re(); if (r.data && r.data.warning) toast(r.data.warning); }); };
+A.akresetdb = (d) => {
+  if (!isP()) return deny();
+  const a = (ACC.rows || []).find((x) => x.id === d.id);
+  if (!a || a.id === U.id) return toast('Akun tidak ditemukan atau tidak dapat direset.', 'err');
+  modal('Atur ulang password?', \`<p class="tx">Password akun <b>\${esc(a.full_name || a.username)}</b> akan diganti. Password lama tidak akan berlaku lagi. Pastikan pemilik akun sudah menyetujui tindakan ini.</p><p class="mut">Password sementara baru akan ditampilkan satu kali setelah berhasil disimpan.</p>\`, () => {
+    if (ACC.resetBusy) return 'Sedang memproses reset password.';
+    ACC.resetBusy = true;
+    const password = genPw(20);
+    callFn('reset_password', { id: a.id, password }).then((r) => {
+      ACC.resetBusy = false;
+      if (!r.ok) return toast(r.msg, 'err');
+      credModal('Password berhasil diatur ulang', 'Sampaikan password sementara ini secara langsung kepada pemilik akun. Setelah masuk, pemilik akun sebaiknya menggantinya melalui pengaturan password.', [{ name: a.full_name || a.username, email: a.username, pw: password }]);
+    }).catch(() => { ACC.resetBusy = false; toast('Reset password gagal. Coba lagi.', 'err'); });
+  }, 'Atur ulang password', true);
+};
 function pPengaturan() {
   const RL = { wali_kelas: 'Guru', siswa: 'Siswa', bendahara: 'Bendahara', pengelola: 'Pengelola' };
   return hd('Pengaturan', 'Akun Anda.') + `<div class="grid g2"><section class="card pad"><h2>Profil akun</h2><p><span class="mut">Nama:</span> <b>${esc(U.name)}</b></p><p><span class="mut">Username:</span> ${esc(U.username || '—')}</p><p><span class="mut">Peran:</span> ${RL[U.role]}</p><p class="hint">Nama dan peran dikelola oleh Pengelola dan tidak dapat diubah sendiri.</p></section>
