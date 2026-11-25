@@ -1001,7 +1001,7 @@ Object.assign(A, {
   akexp() { exportAccounts(); toast('Daftar akun diunduh (tanpa password).'); },
   akreset(d) {
     const a = S.accounts.find((x) => x.id === d.id); if (!a) return;
-    modal('Atur ulang password?', `<p class="tx">Password baru acak dibuat untuk <b>${esc(a.name)}</b>. Password lama tidak berlaku lagi.</p>`, () => { const pw = genPw(); a.salt = randHex(8); a.hash = hashPw(pw, a.salt); logA('Guru mengatur ulang password ' + a.name); re(); credModal('Password diatur ulang (simulasi)', 'Berikan password baru ini kepada pemilik akun.', [credOf(a, pw)]); }, 'Atur ulang');
+    modal('Atur ulang password?', `<p class="tx">Password akun <b>${esc(a.full_name || a.username)}</b> akan diganti. Password lama tidak akan berlaku lagi. Pastikan pemilik akun sudah menyetujui tindakan ini.</p><p class="mut">Password sementara baru akan ditampilkan satu kali setelah berhasil disimpan.</p>`, () => { const pw = genPw(); a.salt = randHex(8); a.hash = hashPw(pw, a.salt); logA('Guru mengatur ulang password ' + a.name); re(); credModal('Password diatur ulang (simulasi)', 'Berikan password baru ini kepada pemilik akun.', [credOf(a, pw)]); }, 'Atur ulang');
   },
   aktoggle(d) {
     const a = S.accounts.find((x) => x.id === d.id); if (!a) return;
