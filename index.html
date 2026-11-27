@@ -1203,6 +1203,37 @@ A.akresetdb = (d) => {
     }).catch(() => { ACC.resetBusy = false; toast('Reset password gagal. Coba lagi.', 'err'); });
   }, 'Atur ulang password', true);
 };
+/* ---------- SUMMARY BOOK (Supabase: summary_periods / summary_entries / summary_marks) ---------- */
+const STORIES = ["Ibn Sina (Avicenna)", "Al-Khwarizmi (I)", "Ibn Al-Haytham (I)", "Jabir ibn Hayyan", "Al-Biruni (I)", "Al-Idrisi (I)", "Al-Zahrawi", "Ibn Khaldun (I)", "Abbas Ibn Firnas", "Omar Khayyam", "Al-Kindi (I)", "Nasir al-Din al-Tusi", "Ibn Nafis", "Al-Jazari", "Fatima al-Fihri", "Maryam al-Asturlabi", "Banu Musa Brothers", "Thabit ibn Qurra", "Al-Masudi (I)", "Sufi al-Marwazi", "Al-Battani", "Ibn Yunus", "Al-Zarqali", "Ibn Baja (Avempace)", "Ibn Tufail", "Ibn Rushd (Averroes)", "Al-Ghazali", "Ibn Zuhr (Avenzoar)", "Al-Razi (Rhazes)", "Hunayn ibn Ishaq", "Al-Biruni (II)", "Ibn al-Haytham (II)", "Al-Kashi", "Ulugh Beg", "Ibn Ishaq al-Kindi", "Jabir ibn Hayyan", "Al-Majriti", "Ibn al-Banna al-Marrakushi", "Al-Nayrizi", "Abu Kamil Shuja", "Al-Khwarizmi part 2 (II)", "Ibn Firnas", "Al-Farabi", "Ibn Khaldun (II)", "Al-Masudi (II)", "Ibn al-Jazzar", "Al-Zahrawi (Albucasis)", "Ibn al-Shatir", "Sharaf al-Dīn al-Tūsī", "Kamāl al-Dīn al-Fārisī", "Al-Jahiz", "Ibn al-Awwam", "Al-Dinawari", "Ibn Bajjah (Avempace)", "Al-Maqrizi", "Ibn Said al-Maghribi", "Al-Qalasadi", "Ibn al-Wardi", "Al-Idrisi (II)", "Yaqut al-Hamawi", "Al-Sijzi", "Ibn al-Haytham (Alhazen) (III)", "Al-Karaji", "Al-Samawal al-Maghribi", "Ibn al-Banna", "Al-Qushayri", "Ibn Miskawayh", "Al-Tawhidi", "Ibn al-Rumi", "Al-Hamadhani"];
+const SUMS = new Set(['sumpick', 'sumdrop', 'sumsave']), SUMB = new Set(['sumreload', 'sumhist', 'sumview']); /* SUMS: siswa/bendahara; SUMB: siswa+guru; aksi lain: guru */
+const sumInit = () => ({ uid: null, loaded: false, loading: false, busy: false, err: '', periods: [], pid: null, mine: {}, marks: {}, draft: new Set(), rows: [], overview: [], view: 'main' });
+const SUMM = sumInit();
+const sumReset = () => Object.assign(SUMM, sumInit(), { uid: U ? U.id : null });
+const SUM_ERR = { forbidden: 'Anda tidak memiliki akses untuk aksi ini.', locked: 'Sudah diperiksa guru, tidak dapat diubah. Hubungi guru jika perlu perbaikan.', too_many: 'Maksimal 5 cerita per minggu.', bad_story: 'Nomor cerita tidak valid.', period_not_found: 'Periode tidak ditemukan.', no_entries: 'Siswa belum mencatat cerita, belum bisa ditandai diperiksa.', not_found: 'Data siswa tidak ditemukan.' };
+const sumMsg = (e) => SUM_ERR[e && e.message] || (e && e.code === '23P01' ? 'Periode bertumpuk dengan periode lain.' : e && e.code === '23505' ? 'Tanggal mulai tersebut sudah dipakai periode lain.' : e && e.code === '23514' ? 'Data periode tidak valid (periksa tanggal).' : 'Terjadi kesalahan. Periksa koneksi lalu coba lagi.');
+const sumQ = async (p) => { const r = await p; if (r.error) throw r.error; return r.data; };
+const jktToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+const fdw = (s) => (s ? new Intl.DateTimeFormat('id-ID', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(s + 'T00:00:00Z')) : '—');
+const sumNorm = (s) => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const sumStatus = (n, rev) => (rev ? 'Sudah Diperiksa' : n >= 3 ? 'Lengkap' : n >= 1 ? 'Belum Lengkap' : 'Belum Mengumpulkan');
+const SUM_TONE = { 'Sudah Diperiksa': 'navy', Lengkap: 'ok', 'Belum Lengkap': 'warn', 'Belum Mengumpulkan': 'mute' };
+const sumBadge = (n, rev) => { const t = sumStatus(n, rev); return bd(t, SUM_TONE[t]); };
+const sumCur = () => SUMM.periods.find((x) => x.id === SUMM.pid) || null;
+const sumStoryLine = (n) => `<div class="ssl"><b>${n}.</b> ${esc(STORIES[n - 1])}</div>`;
+function sumPick(per) { const t = jktToday(); return (per.find((x) => x.start_date <= t && t <= x.end_date) || per.find((x) => x.start_date <= t) || per[0] || {}).id || null; }
+function sumLoad(force) {
+  if (!SB || !U || SUMM.loading || (SUMM.loaded && !force)) return;
+  SUMM.loading = true; SUMM.err = ''; const uid = U.id;
+  (async () => {
+    try {
+      SUMM.periods = (await sumQ(SB.from('summary_periods').select('*').order('start_date', { ascending: false }))) || [];
+      if (!SUMM.periods.some((x) => x.id === SUMM.pid)) SUMM.pid = sumPick(SUMM.periods);
+      if (isT()) await sumLoadTeacher(); else await sumLoadStudent();
+      SUMM.loaded = true;
+    } catch (e) { SUMM.err = sumMsg(e); }
+    SUMM.loading = false; if (U && U.id === uid && (cur === 'summary' || cur === 'dash')) re();
+  })();
+}
 async function sumLoadStudent() {
   const [en, mk] = await Promise.all([sumQ(SB.from('summary_entries').select('period_id,story_no').eq('student_id', U.id)), sumQ(SB.from('summary_marks').select('period_id,collected,reviewed,reviewed_at').eq('student_id', U.id))]);
   SUMM.mine = {}; (en || []).forEach((x) => { (SUMM.mine[x.period_id] = SUMM.mine[x.period_id] || []).push(+x.story_no); });
