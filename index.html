@@ -880,7 +880,7 @@ function render() {
   const app = $('#app'); document.body.classList.toggle('isapp', !!U);
   const [p0, arg] = location.hash.slice(2).split('/');
   if (!U) { cur = 'login'; app.innerHTML = pLogin(); return; }
-  const ok = NAVS[navKey()].map((x) => x[0]).concat(isP() ? [] : ['album', 'pengumuman']);
+  const ok = NAVS[navKey()].map((x) => x[0]).concat(['album'], isP() ? [] : ['pengumuman']);
   if (p0 && !ok.includes(p0) && pages[p0]) { setHash(isP() ? '#/akun' : '#/dash'); toast('Anda tidak memiliki akses ke halaman tersebut.', 'err'); }
   const p = ok.includes(p0) ? p0 : (isP() ? 'akun' : 'dash');
   if (p !== cur) { F = {}; }
@@ -1139,7 +1139,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('input', (e) => {
   const k = e.target.dataset && e.target.dataset.f; if (!k) return;
   F[k] = e.target.value;
-  const l = $('#list'); if (l) l.innerHTML = L[cur]();
+  const l = $('#list'); if (cur === 'galeri') { re(); } else if (l) l.innerHTML = L[cur]();
   const u = $('#unf'); if (u) u.innerHTML = unfHtml();
   if (cur === 'izin') { /* statistik ikut diperbarui */ const keep = document.activeElement; render(); const n = $(`[data-f="${k}"]`); if (n && keep && keep.dataset.f === k) { n.focus(); try { n.setSelectionRange(n.value.length, n.value.length); } catch (_) {} } }
   if (cur === 'kas' || cur === 'summary') { /* ringkasan tidak bergantung filter */ }
