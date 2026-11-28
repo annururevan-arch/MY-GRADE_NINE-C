@@ -1076,7 +1076,7 @@ function openLb(id, i) {
 
 /* ---------- event global ---------- */
 const ANN_ACT = new Set(['anadd', 'anedit', 'andel', 'anpin']), ANY = new Set(['nav', 'drawer', 'logout', 'lb', 'annreload', 'asasfile']), ASAS_EDIT = new Set(['asasadd', 'asasedit', 'asasdel', 'asasreload']), KAS = new Set(['kasadd', 'kasedit', 'kasdel']);
-function allowed(act) { if (act === 'pwtog') return true; if (!U) return false; if (ANY.has(act)) return true; if (PADM.has(act) || ADMIN_SUMMARY.has(act)) return isP(); if (ANN_ACT.has(act) || ASAS_EDIT.has(act)) return isT() || isP(); if (isP()) return false; if (SUMB.has(act)) return true; if (SUMS.has(act)) return !isT(); if (KAS.has(act)) return canKas(); if (act === 'izme') return !isT(); return isT(); }
+function allowed(act) { if (act === 'pwtog') return true; if (!U) return false; if (ANY.has(act)) return true; if (act === 'summarkbulk') return isT() || isP(); if (PADM.has(act) || ADMIN_SUMMARY.has(act)) return isP(); if (ANN_ACT.has(act) || ASAS_EDIT.has(act)) return isT() || isP(); if (isP()) return false; if (SUMB.has(act)) return true; if (SUMS.has(act)) return !isT(); if (KAS.has(act)) return canKas(); if (act === 'izme') return !isT(); return isT(); }
 document.addEventListener('click', (e) => {
   const a = e.target.closest('[data-act]'); if (!a) return;
   const fn = A[a.dataset.act]; if (fn && !allowed(a.dataset.act)) { deny(); return; } if (fn) { try { fn(a.dataset, a, e); } catch (err) { console.error(err); toast('Terjadi kesalahan pada preview.', 'err'); } }
@@ -1207,7 +1207,7 @@ A.akresetdb = (d) => {
 };
 /* ---------- SUMMARY BOOK (Supabase: summary_periods / summary_entries / summary_marks) ---------- */
 const STORIES = ["Ibn Sina (Avicenna)", "Al-Khwarizmi (I)", "Ibn Al-Haytham (I)", "Jabir ibn Hayyan", "Al-Biruni (I)", "Al-Idrisi (I)", "Al-Zahrawi", "Ibn Khaldun (I)", "Abbas Ibn Firnas", "Omar Khayyam", "Al-Kindi (I)", "Nasir al-Din al-Tusi", "Ibn Nafis", "Al-Jazari", "Fatima al-Fihri", "Maryam al-Asturlabi", "Banu Musa Brothers", "Thabit ibn Qurra", "Al-Masudi (I)", "Sufi al-Marwazi", "Al-Battani", "Ibn Yunus", "Al-Zarqali", "Ibn Baja (Avempace)", "Ibn Tufail", "Ibn Rushd (Averroes)", "Al-Ghazali", "Ibn Zuhr (Avenzoar)", "Al-Razi (Rhazes)", "Hunayn ibn Ishaq", "Al-Biruni (II)", "Ibn al-Haytham (II)", "Al-Kashi", "Ulugh Beg", "Ibn Ishaq al-Kindi", "Jabir ibn Hayyan", "Al-Majriti", "Ibn al-Banna al-Marrakushi", "Al-Nayrizi", "Abu Kamil Shuja", "Al-Khwarizmi part 2 (II)", "Ibn Firnas", "Al-Farabi", "Ibn Khaldun (II)", "Al-Masudi (II)", "Ibn al-Jazzar", "Al-Zahrawi (Albucasis)", "Ibn al-Shatir", "Sharaf al-Dīn al-Tūsī", "Kamāl al-Dīn al-Fārisī", "Al-Jahiz", "Ibn al-Awwam", "Al-Dinawari", "Ibn Bajjah (Avempace)", "Al-Maqrizi", "Ibn Said al-Maghribi", "Al-Qalasadi", "Ibn al-Wardi", "Al-Idrisi (II)", "Yaqut al-Hamawi", "Al-Sijzi", "Ibn al-Haytham (Alhazen) (III)", "Al-Karaji", "Al-Samawal al-Maghribi", "Ibn al-Banna", "Al-Qushayri", "Ibn Miskawayh", "Al-Tawhidi", "Ibn al-Rumi", "Al-Hamadhani"];
-const SUMS = new Set(['sumpick', 'sumdrop', 'sumsave']), SUMB = new Set(['sumreload', 'sumhist', 'sumview']); /* SUMS: siswa/bendahara; SUMB: siswa+guru; aksi lain: guru */
+const SUMS = new Set(['sumpick', 'sumdrop', 'sumsave']), SUMB = new Set(['sumreload', 'sumhist', 'sumview', 'summarkbulk']); /* SUMS: siswa/bendahara; SUMB: siswa+guru; aksi lain: guru */
 const sumInit = () => ({ uid: null, loaded: false, loading: false, busy: false, err: '', periods: [], pid: null, mine: {}, marks: {}, draft: new Set(), rows: [], overview: [], view: 'main' });
 const SUMM = sumInit();
 const sumReset = () => Object.assign(SUMM, sumInit(), { uid: U ? U.id : null });
@@ -1382,6 +1382,7 @@ function pSummaryMass() {
   const periods = SUMBULK.periods;
   const periodOptions = periods.map(x => '<option value="' + esc(x.id) + '">Minggu ke-' + x.week_no + ' · ' + fd(x.start_date) + ' – ' + fd(x.end_date) + '</option>').join('');
   const studentList = SUMBULK.students.length ? SUMBULK.students.map(s => '<label class="lgl" style="justify-content:flex-start;gap:10px;padding:8px 10px;border-bottom:1px solid var(--line)"><input type="checkbox" name="bulk_student" value="' + esc(s.id) + '" style="width:18px;height:18px;min-height:0"><span><b>' + esc(s.full_name) + '</b><small class="mut" style="display:block">' + esc(s.username || '') + '</small></span></label>').join('') : '<p class="mut">Belum ada siswa aktif.</p>';
+  const markStudents = SUMBULK.students.length ? SUMBULK.students.map(s => '<label class="lgl" style="justify-content:flex-start;gap:10px;padding:8px 10px;border-bottom:1px solid var(--line)"><input type="checkbox" name="mark_student" value="' + esc(s.id) + '" style="width:18px;height:18px;min-height:0"><span><b>' + esc(s.full_name) + '</b></span></label>').join('') : '<p class="mut">Belum ada siswa aktif.</p>';
   const storyList = STORIES.map((s,i) => '<label style="display:flex;gap:8px;align-items:flex-start;padding:7px;border:1px solid var(--line);border-radius:9px;background:#fff"><input type="checkbox" name="bulk_story" value="' + (i+1) + '" style="width:17px;height:17px;min-height:0;flex:none"><span><b>Story ' + (i+1) + '</b><small class="mut" style="display:block">' + esc(s) + '</small></span></label>').join('');
   return hd('Input Summary Book Massal', 'Khusus Administrator · data akan masuk ke akun siswa yang dipilih.') +
     (SUMBULK.err ? '<div class="note n-warn">' + esc(SUMBULK.err) + ' <button class="btn sec sm" type="button" data-act="sumbulkload">Coba lagi</button></div>' : '') +
@@ -1389,7 +1390,8 @@ function pSummaryMass() {
     '<section class="card pad" style="margin-bottom:14px"><h2>1. Pilih minggu</h2><select name="period" required>' + periodOptions + '</select></section>' +
     '<section class="card pad" style="margin-bottom:14px"><h2>2. Pilih siswa</h2><p class="hint" style="margin-bottom:10px">Centang hanya siswa yang benar-benar sudah mengerjakan cerita tersebut.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:4px">' + studentList + '</div></section>' +
     '<section class="card pad" style="margin-bottom:14px"><h2>3. Pilih cerita</h2><p class="hint" style="margin-bottom:10px">Pilih 3–5 cerita yang dikerjakan oleh siswa-siswa terpilih.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px">' + storyList + '</div></section>' +
-    '<button class="btn pri full" type="submit" ' + (!periods.length || !SUMBULK.students.length ? 'disabled' : '') + '>' + (SUMBULK.busy ? 'Menyimpan…' : 'Simpan untuk Siswa Terpilih') + '</button></form>');
+    '<button class="btn pri full" type="submit" ' + (!periods.length || !SUMBULK.students.length ? 'disabled' : '') + '>' + (SUMBULK.busy ? 'Menyimpan…' : 'Simpan untuk Siswa Terpilih') + '</button></form>') +
+    '<section class="card pad" style="margin-top:14px"><h2>Penandaan Status Massal</h2><p class="hint">Pilih siswa yang benar-benar sudah mengumpulkan atau sudah diperiksa. Kedua status diproses secara terpisah.</p><label class="lb">Minggu</label><select id="mark-period">' + periodOptions + '</select><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:4px;margin:10px 0">' + markStudents + '</div><div class="ac" style="flex-wrap:wrap"><button type="button" class="btn ok" data-act="summarkbulk" data-k="collected">Tandai Terkumpul</button><button type="button" class="btn pri" data-act="summarkbulk" data-k="reviewed">Tandai Diperiksa</button></div></section>');
 }
 /* ----- guru ----- */
 function sumTeacher() {
@@ -1409,7 +1411,7 @@ function sumRekapTable() {
   const P = sumCur(), q = (F.q || '').toLowerCase(), st = F.st || '';
   const all = SUMM.rows.map((r, i) => ({ r, i: i + 1, s: sumStatus(r.story_count, r.reviewed) })), rows = all.filter((x) => (!q || String(x.r.full_name || '').toLowerCase().includes(q)) && (!st || x.s === st));
   if (!rows.length) return '<p class="mut" style="padding:16px">' + (all.length ? 'Tidak ada data yang cocok.' : 'Belum ada siswa aktif. Buat akun siswa lewat Pengelola.') + '</p>';
-  return tbl(['Nomor', 'Nama Siswa', 'Minggu', 'Story yang Dikerjakan', 'Jumlah Story', 'Status', 'Aksi'], rows.map(({ r, i, s }) => `<tr><td>${i}</td><td><b>${esc(r.full_name)}</b></td><td style="white-space:nowrap">Minggu ke-${P.week_no}</td><td style="min-width:230px">${r.stories.length ? r.stories.map(sumStoryLine).join('') : '—'}</td><td style="white-space:nowrap">${r.story_count}/5</td><td>${bd(s, SUM_TONE[s])}${r.collected ? '<small class="mut" style="display:block">Buku terkumpul</small>' : ''}</td><td class="act"><button type="button" class="btn ${r.collected ? 'sec' : 'ok'} sm" data-act="summark" data-sid="${r.student_id}" data-k="collected" data-v="${r.collected ? 0 : 1}">${r.collected ? 'Batal Terkumpul' : 'Tandai Terkumpul'}</button><button type="button" class="btn ${r.reviewed ? 'sec' : 'pri'} sm" data-act="summark" data-sid="${r.student_id}" data-k="reviewed" data-v="${r.reviewed ? 0 : 1}"${!r.reviewed && !r.story_count ? ' disabled' : ''}>${r.reviewed ? 'Batal Periksa' : 'Tandai Diperiksa'}</button></td></tr>`).join(''));
+  return '<div class="card pad" style="margin:12px 0"><p class="hint">Centang beberapa siswa, lalu pilih tindakan. Terkumpul dan Diperiksa diproses terpisah.</p><div class="ac" style="flex-wrap:wrap"><button type="button" class="btn ok sm" data-act="summarkbulk" data-k="collected">Tandai Terkumpul</button><button type="button" class="btn pri sm" data-act="summarkbulk" data-k="reviewed">Tandai Diperiksa</button></div></div>' + tbl(['Pilih', 'Nomor', 'Nama Siswa', 'Minggu', 'Story yang Dikerjakan', 'Jumlah Story', 'Status', 'Aksi'], rows.map(({ r, i, s }) => `<tr><td><input type="checkbox" name="mark_student" value="${r.student_id}" aria-label="Pilih ${esc(r.full_name)}" style="width:18px;height:18px;min-height:0"></td><td>${i}</td><td><b>${esc(r.full_name)}</b></td><td style="white-space:nowrap">Minggu ke-${P.week_no}</td><td style="min-width:230px">${r.stories.length ? r.stories.map(sumStoryLine).join('') : '—'}</td><td style="white-space:nowrap">${r.story_count}/5</td><td>${bd(s, SUM_TONE[s])}${r.collected ? '<small class="mut" style="display:block">Buku terkumpul</small>' : ''}</td><td class="act"><button type="button" class="btn ${r.collected ? 'sec' : 'ok'} sm" data-act="summark" data-sid="${r.student_id}" data-k="collected" data-v="${r.collected ? 0 : 1}">${r.collected ? 'Batal Terkumpul' : 'Tandai Terkumpul'}</button><button type="button" class="btn ${r.reviewed ? 'sec' : 'pri'} sm" data-act="summark" data-sid="${r.student_id}" data-k="reviewed" data-v="${r.reviewed ? 0 : 1}"${!r.reviewed && !r.story_count ? ' disabled' : ''}>${r.reviewed ? 'Batal Periksa' : 'Tandai Diperiksa'}</button></td></tr>`).join(''));
 }
 L.summary = () => (isT() ? sumRekapTable() : sumCatalog());
 function sumOverview() {
@@ -1435,6 +1437,29 @@ async function sumSavePeriod(x, o) {
 }
 A.sumper = (d) => sumPeriodForm(d.id ? SUMM.periods.find((x) => x.id === d.id) : null);
 A.sumview = (d) => { SUMM.view = d.v; if (d.p) { SUMM.pid = d.p; SUMM.loaded = false; } re(); };
+A.summarkbulk = async (d) => {
+  if (SUMM.busy || SUMBULK.busy) return;
+  const form = document.querySelector('input[name="mark_student"]')?.closest('section') || document;
+  const students = [...form.querySelectorAll('input[name="mark_student"]:checked')].map(x => x.value);
+  const period = isP() ? document.getElementById('mark-period')?.value : SUMM.pid;
+  if (!period) return toast('Pilih minggu terlebih dahulu.', 'err');
+  if (!students.length) return toast('Pilih minimal satu siswa.', 'err');
+  const reviewed = d.k === 'reviewed';
+  const label = reviewed ? 'Diperiksa' : 'Terkumpul';
+  if (!window.confirm('Tandai status ' + label + ' untuk ' + students.length + ' siswa terpilih pada minggu ini?')) return;
+  SUMM.busy = true; re();
+  try {
+    const args = { p_period: period, p_students: students, p_reviewed: reviewed ? true : null, p_collected: reviewed ? null : true };
+    const result = await sumQ(SB.rpc('summary_mark_bulk', args));
+    toast('Berhasil menandai ' + Number(result || students.length) + ' siswa sebagai ' + label + '.');
+    if (isT()) await sumLoadTeacher();
+    else await sumBulkLoad(true);
+  } catch (e) {
+    console.error('Penandaan Summary Book massal:', e);
+    toast(sumMsg(e) || 'Penandaan massal gagal. Periksa SQL dan koneksi.', 'err');
+  }
+  SUMM.busy = false; re();
+};
 A.summark = async (d) => {
   if (SUMM.busy || !SUMM.pid) return; SUMM.busy = true;
   const a = { p_period: SUMM.pid, p_student: d.sid }; a[d.k === 'reviewed' ? 'p_reviewed' : 'p_collected'] = d.v === '1';
