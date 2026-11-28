@@ -517,7 +517,7 @@ function todayPanel() {
 
 /* ---------- navigasi & shell ---------- */
 const NAVS = {
-  admin: [['akun', 'Manajemen Akun', 'key'], ['asas', 'Menu ASAS', 'graduation-cap'], ['pengumuman', 'Pengumuman', 'megaphone'], ['pengaturan', 'Pengaturan', 'settings']],
+  admin: [['akun', 'Manajemen Akun', 'key'], ['summary_mass', 'Input Summary Book Massal', 'bookcheck'], ['asas', 'Menu ASAS', 'graduation-cap'], ['pengumuman', 'Pengumuman', 'megaphone'], ['pengaturan', 'Pengaturan', 'settings']],
   student: [['dash', 'Dashboard', 'home'], ['profil', 'Profil Kelas', 'school'], ['struktur', 'Struktur Kelas', 'network'], ['jadwal', 'Jadwal Pelajaran & Piket', 'calendar'], ['galeri', 'Galeri', 'image'], ['summary', 'Summary Book', 'bookcheck'], ['asas', 'Menu ASAS', 'graduation-cap'], ['bta', 'BTA', 'book'], ['kas', 'Kas Kelas', 'wallet'], ['izin', 'Permission to Carry a Cell Phone', 'phone']],
   teacher: [['dash', 'Dashboard', 'home'], ['siswa', 'Data Siswa', 'users'], ['profil', 'Profil Kelas', 'school'], ['struktur', 'Struktur Kelas', 'network'], ['jadwal', 'Jadwal Pelajaran & Piket', 'calendar'], ['galeri', 'Galeri', 'image'], ['summary', 'Summary Book', 'bookcheck'], ['asas', 'Menu ASAS', 'graduation-cap'], ['bta', 'BTA', 'book'], ['kas', 'Kas Kelas', 'wallet'], ['izin', 'Permission to Carry a Cell Phone', 'phone'], ['pengumuman', 'Pengumuman', 'megaphone'], ['pengaturan', 'Pengaturan', 'settings']],
 };
@@ -817,7 +817,7 @@ function pPengaturan() {
       <p class="tip" style="margin-top:14px">Untuk perubahan data akun atau bantuan pengaturan password, hubungi Pengelola kelas.</p>
     </section>`;
 }
-const pages = { dash: pDash, profil: pProfil, struktur: pStruktur, jadwal: pJadwal, galeri: pGaleri, album: pAlbum, summary: pSummary, asas: pAsas, bta: pBta, kas: pKas, izin: pIzin, siswa: pSiswa, pengumuman: pPengumuman, pengaturan: pPengaturan, akun: pAkun };
+const pages = { summary_mass: pSummaryMass, dash: pDash, profil: pProfil, struktur: pStruktur, jadwal: pJadwal, galeri: pGaleri, album: pAlbum, summary: pSummary, asas: pAsas, bta: pBta, kas: pKas, izin: pIzin, siswa: pSiswa, pengumuman: pPengumuman, pengaturan: pPengaturan, akun: pAkun };
 
 function render() {
   const app = $('#app'); document.body.classList.toggle('isapp', !!U);
@@ -1076,7 +1076,7 @@ function openLb(id, i) {
 
 /* ---------- event global ---------- */
 const ANN_ACT = new Set(['anadd', 'anedit', 'andel', 'anpin']), ANY = new Set(['nav', 'drawer', 'logout', 'lb', 'annreload', 'asasfile']), ASAS_EDIT = new Set(['asasadd', 'asasedit', 'asasdel', 'asasreload']), KAS = new Set(['kasadd', 'kasedit', 'kasdel']);
-function allowed(act) { if (act === 'pwtog') return true; if (!U) return false; if (ANY.has(act)) return true; if (PADM.has(act)) return isP(); if (ANN_ACT.has(act) || ASAS_EDIT.has(act)) return isT() || isP(); if (isP()) return false; if (SUMB.has(act)) return true; if (SUMS.has(act)) return !isT(); if (KAS.has(act)) return canKas(); if (act === 'izme') return !isT(); return isT(); }
+function allowed(act) { if (act === 'pwtog') return true; if (!U) return false; if (ANY.has(act)) return true; if (PADM.has(act) || ADMIN_SUMMARY.has(act)) return isP(); if (ANN_ACT.has(act) || ASAS_EDIT.has(act)) return isT() || isP(); if (isP()) return false; if (SUMB.has(act)) return true; if (SUMS.has(act)) return !isT(); if (KAS.has(act)) return canKas(); if (act === 'izme') return !isT(); return isT(); }
 document.addEventListener('click', (e) => {
   const a = e.target.closest('[data-act]'); if (!a) return;
   const fn = A[a.dataset.act]; if (fn && !allowed(a.dataset.act)) { deny(); return; } if (fn) { try { fn(a.dataset, a, e); } catch (err) { console.error(err); toast('Terjadi kesalahan pada preview.', 'err'); } }
@@ -1094,6 +1094,7 @@ document.addEventListener('change', (e) => {
   if (e.target.dataset && e.target.dataset.f && e.target.tagName === 'SELECT') { /* sudah ditangani oleh event input */ }
 });
 document.addEventListener('submit', (e) => {
+  if (e.target.id === 'sum-bulk-form') { e.preventDefault(); A.sumbulksave(e.target); return; }
   const id = e.target.id; if (!id) return; e.preventDefault();
   if (id === 'lf') return doLogin(e.target);
   if (!U) return;
@@ -1113,6 +1114,7 @@ const ROLE_MAP = { guru: 'wali_kelas', siswa: 'siswa', bendahara: 'bendahara', p
 const isP = () => !!U && U.role === 'pengelola';
 const navKey = () => (isP() ? 'admin' : isT() ? 'teacher' : 'student');
 const PADM = new Set(['aktog', 'akresetdb']);
+const ADMIN_SUMMARY = new Set(['sumbulkload', 'sumbulksave']);
 const isNet = (e) => !!e && (e.name === 'AuthRetryableFetchError' || !e.status || e.status >= 500);
 function wipeLocalAuth() { try { Object.keys(localStorage).filter((k) => /^sb-.*-auth-token/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch (_) {} }
 /* true = profil valid | false = sesi/akun TIDAK valid | null = gangguan jaringan/server (jangan logout) */
@@ -1329,7 +1331,66 @@ A.sumsave = async () => {
   SUMM.busy = false; re();
 };
 A.sumhist = () => { SUMM.view = SUMM.view === 'hist' ? 'main' : 'hist'; re(); };
+A.sumbulkload = () => { SUMBULK.students = []; sumBulkLoad(true); };
+A.sumbulksave = async (form) => {
+  if (!isP() || SUMBULK.busy) return deny();
+  const period = form.elements.period.value;
+  const students = [...form.querySelectorAll('input[name="bulk_student"]:checked')].map(x => x.value);
+  const stories = [...form.querySelectorAll('input[name="bulk_story"]:checked')].map(x => +x.value).sort((a,b)=>a-b);
+  if (!period) return toast('Pilih minggu terlebih dahulu.', 'err');
+  if (!students.length) return toast('Pilih minimal satu siswa.', 'err');
+  if (stories.length < 3 || stories.length > 5) return toast('Pilih 3–5 cerita.', 'err');
+  const ok = window.confirm('Simpan ' + stories.length + ' cerita untuk ' + students.length + ' siswa terpilih? Pastikan semua siswa tersebut benar-benar mengerjakannya.');
+  if (!ok) return;
+  SUMBULK.busy = true; const btn = form.querySelector('button[type="submit"]'); if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan…'; }
+  try {
+    const result = await sumQ(SB.rpc('summary_admin_bulk_save', { p_period: period, p_students: students, p_stories: stories }));
+    toast('Berhasil menyimpan Summary Book untuk ' + Number(result || students.length) + ' siswa.');
+    await sumBulkLoad(true);
+  } catch (e) {
+    console.error('Input Summary Book massal:', e);
+    toast(sumMsg(e) || 'Gagal menyimpan. Periksa SQL dan koneksi.', 'err');
+    SUMBULK.busy = false; re(); return;
+  }
+  SUMBULK.busy = false; re();
+};
 A.sumreload = () => { SUMM.err = ''; SUMM.loaded = false; re(); };
+/* ----- input Summary Book massal khusus Pengelola ----- */
+const SUMBULK = { periods: [], students: [], loading: false, busy: false, err: '' };
+async function sumBulkLoad(force) {
+  if (!isP() || !SB || (SUMBULK.loading || (SUMBULK.students.length && !force))) return;
+  SUMBULK.loading = true; SUMBULK.err = '';
+  try {
+    const [p, s] = await Promise.all([
+      sumQ(SB.from('summary_periods').select('id,week_no,start_date,end_date').order('week_no', { ascending: true })),
+      sumQ(SB.rpc('summary_admin_students'))
+    ]);
+    SUMBULK.periods = p || [];
+    SUMBULK.students = s || [];
+  } catch (e) {
+    console.error('Summary Book massal:', e);
+    SUMBULK.err = 'Data belum dapat dimuat. Pastikan SQL fitur Summary Book Massal sudah dipasang.';
+  } finally {
+    SUMBULK.loading = false;
+    if (isP() && cur === 'summary_mass') re();
+  }
+}
+function pSummaryMass() {
+  if (!isP()) return '';
+  if (!SB) return hd('Input Summary Book Massal', 'Khusus Administrator.') + '<div class="card pad">Supabase belum tersedia.</div>';
+  if (!SUMBULK.students.length && !SUMBULK.loading && !SUMBULK.err) sumBulkLoad();
+  const periods = SUMBULK.periods;
+  const periodOptions = periods.map(x => '<option value="' + esc(x.id) + '">Minggu ke-' + x.week_no + ' · ' + fd(x.start_date) + ' – ' + fd(x.end_date) + '</option>').join('');
+  const studentList = SUMBULK.students.length ? SUMBULK.students.map(s => '<label class="lgl" style="justify-content:flex-start;gap:10px;padding:8px 10px;border-bottom:1px solid var(--line)"><input type="checkbox" name="bulk_student" value="' + esc(s.id) + '" style="width:18px;height:18px;min-height:0"><span><b>' + esc(s.full_name) + '</b><small class="mut" style="display:block">' + esc(s.username || '') + '</small></span></label>').join('') : '<p class="mut">Belum ada siswa aktif.</p>';
+  const storyList = STORIES.map((s,i) => '<label style="display:flex;gap:8px;align-items:flex-start;padding:7px;border:1px solid var(--line);border-radius:9px;background:#fff"><input type="checkbox" name="bulk_story" value="' + (i+1) + '" style="width:17px;height:17px;min-height:0;flex:none"><span><b>Story ' + (i+1) + '</b><small class="mut" style="display:block">' + esc(s) + '</small></span></label>').join('');
+  return hd('Input Summary Book Massal', 'Khusus Administrator · data akan masuk ke akun siswa yang dipilih.') +
+    (SUMBULK.err ? '<div class="note n-warn">' + esc(SUMBULK.err) + ' <button class="btn sec sm" type="button" data-act="sumbulkload">Coba lagi</button></div>' : '') +
+    (SUMBULK.loading ? '<div class="card pad">Memuat daftar siswa dan periode…</div>' : '<form id="sum-bulk-form">' +
+    '<section class="card pad" style="margin-bottom:14px"><h2>1. Pilih minggu</h2><select name="period" required>' + periodOptions + '</select></section>' +
+    '<section class="card pad" style="margin-bottom:14px"><h2>2. Pilih siswa</h2><p class="hint" style="margin-bottom:10px">Centang hanya siswa yang benar-benar sudah mengerjakan cerita tersebut.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:4px">' + studentList + '</div></section>' +
+    '<section class="card pad" style="margin-bottom:14px"><h2>3. Pilih cerita</h2><p class="hint" style="margin-bottom:10px">Pilih 3–5 cerita yang dikerjakan oleh siswa-siswa terpilih.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px">' + storyList + '</div></section>' +
+    '<button class="btn pri full" type="submit" ' + (!periods.length || !SUMBULK.students.length ? 'disabled' : '') + '>' + (SUMBULK.busy ? 'Menyimpan…' : 'Simpan untuk Siswa Terpilih') + '</button></form>');
+}
 /* ----- guru ----- */
 function sumTeacher() {
   const v = SUMM.view === 'main' || SUMM.view === 'overview' || SUMM.view === 'periods' ? SUMM.view : 'main';
