@@ -660,6 +660,7 @@ function pSummarySim() {
   return hd('Summary Book', 'Pantau siswa yang sudah dan belum mengumpulkan.') + `<div class="grid g3" style="margin-bottom:14px">${stat('bookcheck', 'Submitted', n)}${stat('bookcheck', 'Not Submitted', s.length - n)}${stat('users', 'Total siswa', s.length)}</div><div class="card pad fb">${fin('q', 'Cari nama', { ph: 'Nama siswa' })}${fin('st', 'Status', { opts: [['', 'Semua'], ['submitted', 'Submitted'], ['not_submitted', 'Not Submitted']] })}</div>${list('summary')}`;
 }
 const histHtml = (h) => (h.length ? h.map((x) => `<div class="lgl" style="background:#f8fafc;border-radius:10px;padding:10px 12px;margin-bottom:8px;flex-wrap:wrap"><span>${sb(x.st)} ${x.d ? 'Tgl ' + fd(x.d) : ''}${x.note ? '<br>Catatan: ' + esc(x.note) : ''}</span><small>${x.at}</small></div>`).join('') : '<p class="mut">Belum ada riwayat pengumpulan.</p>');
+const L = {};
 L.summarySim = () => {
   const q = (F.q || '').toLowerCase(), st = F.st || '';
   const rows = act().map((s) => [s, S.sum[s.id] || (S.sum[s.id] = { st: 'not_submitted', d: null, note: '', h: [] })]).filter(([s, r]) => (!q || s.name.toLowerCase().includes(q)) && (!st || r.st === st));
