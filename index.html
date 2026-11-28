@@ -912,11 +912,9 @@ const A = {
   dadd(d) { modal('Tambah anggota piket · ' + DAYS[d.d - 1][2], fld('Nama', 'v', { req: true, max: 80 }), (f) => { S.duty[d.d].push(f.get('v').trim()); re(); toast('Anggota piket disimpan (simulasi).'); }); },
   ddel(d) { S.duty[d.d].splice(d.i, 1); re(); toast('Anggota piket dihapus.'); },
   /* galeri */
-  aladd() { alForm(); }, aledit(d) { alForm(S.albums.find((x) => x.id === +d.id)); },
-  aldel(d) { const a = S.albums.find((x) => x.id === +d.id); confirmBox('Hapus album?', `Album "${a.title}" beserta ${a.ph.length} fotonya akan dihapus.`, () => { S.albums = S.albums.filter((x) => x !== a); re(); toast('Album dihapus.'); }); },
-  phadd(d) { const a = S.albums.find((x) => x.id === +d.id); a.ph.push(180 + ((a.ph.length * 37) % 70)); re(); toast('Foto DEMO ditambahkan.'); },
-  phdel(d) { S.albums.find((x) => x.id === +d.id).ph.splice(d.i, 1); re(); toast('Foto dihapus.'); },
-  lb(d) { openLb(+d.id, +d.i); },
+  aladd() { galAlbumForm(null); }, aledit(d) { galAlbumForm(galFind(d.id)); },
+  aldel(d) { galDeleteAlbum(d.id); }, phadd(d) { galUploadForm(d.id); }, phdel(d) { galDeletePhoto(d.id); },
+  lb(d) { openGalleryPhoto(d.id); }, galreload() { GAL.err = ''; GAL.loaded = false; galLoad(true); },
   /* summary */
   sbmark(d) { sbSet(d.id, 'submitted', ymd(), null); },
   sbedit(d) { const r = S.sum[d.id]; modal('Summary Book · ' + stu(d.id).name, fld('Status', 'st', { v: r.st, opts: [['submitted', 'Submitted'], ['not_submitted', 'Not Submitted']] }) + fld('Tanggal pengumpulan', 'd', { type: 'date', v: r.d || '', hint: 'Kosong = hari ini (jika Submitted).' }) + fld('Catatan', 'note', { v: r.note, rows: 3 }), (f) => { sbSet(d.id, f.get('st'), f.get('d') || ymd(), f.get('note').trim()); }); },
@@ -1133,7 +1131,7 @@ function openLb(id, i) {
 
 /* ---------- event global ---------- */
 const ANN_ACT = new Set(['anadd', 'anedit', 'andel', 'anpin']), ANY = new Set(['nav', 'drawer', 'logout', 'lb', 'annreload', 'asasfile']), ASAS_EDIT = new Set(['asasadd', 'asasedit', 'asasdel', 'asasreload']), KAS = new Set(['kasadd', 'kasedit', 'kasdel']);
-function allowed(act) { if (act === 'pwtog') return true; if (!U) return false; if (ANY.has(act)) return true; if (act === 'summarkbulk') return isT() || isP(); if (PADM.has(act) || ADMIN_SUMMARY.has(act)) return isP(); if (ANN_ACT.has(act) || ASAS_EDIT.has(act)) return isT() || isP(); if (isP()) return false; if (SUMB.has(act)) return true; if (SUMS.has(act)) return !isT(); if (KAS.has(act)) return canKas(); if (act === 'izme') return !isT(); return isT(); }
+function allowed(act) { if (act === 'pwtog') return true; if (!U) return false; if (act === 'lb') return true; if (['aladd','aledit','aldel','phadd','phdel'].includes(act)) return galCan(); if (act === 'galreload') return true; if (ANY.has(act)) return true; if (act === 'summarkbulk') return isT() || isP(); if (PADM.has(act) || ADMIN_SUMMARY.has(act)) return isP(); if (ANN_ACT.has(act) || ASAS_EDIT.has(act)) return isT() || isP(); if (isP()) return false; if (SUMB.has(act)) return true; if (SUMS.has(act)) return !isT(); if (KAS.has(act)) return canKas(); if (act === 'izme') return !isT(); return isT(); }
 document.addEventListener('click', (e) => {
   const a = e.target.closest('[data-act]'); if (!a) return;
   const fn = A[a.dataset.act]; if (fn && !allowed(a.dataset.act)) { deny(); return; } if (fn) { try { fn(a.dataset, a, e); } catch (err) { console.error(err); toast('Terjadi kesalahan pada preview.', 'err'); } }
