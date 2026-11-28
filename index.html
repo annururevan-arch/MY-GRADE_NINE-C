@@ -789,7 +789,7 @@ function pIzin() {
     const form = cu ? (cu.st === 'pending' ? `<div class="ac" style="margin-bottom:10px">${sb(cu.st)}${sb(cu.choice)}</div><p class="mut">Permohonan untuk ${fd(cu.d)} sudah dikirim. Kamu masih dapat mengubahnya selama status Menunggu.</p><button class="btn sec" type="button" data-act="izme" data-id="${cu.id}">${ic('pencil')}Ubah formulir</button>` : `<div class="ac" style="margin-bottom:10px">${sb(cu.st)}${sb(cu.choice)}</div><p class="mut">Permohonan untuk ${fd(cu.d)} telah ditinjau guru.</p>${cu.tn ? `<p class="tip"><b>Catatan guru:</b> ${esc(cu.tn)}</p>` : ''}`) : `<form id="izf">${phoneFields({permission_date:target})}<button class="btn pri">Kirim formulir</button></form>`;
     return hd('Permission to Carry a Cell Phone', 'Wajib diisi seluruh siswa setiap hari untuk tanggal izin yang dipilih, baik membawa maupun tidak membawa HP.') + `<div class="note n-info">${POLICY} Pilih tanggal izin terlebih dahulu; pengajuan hanya dapat dikirim sebelum tanggal tersebut.</div>
     <div class="card pad" style="margin-bottom:14px"><div style="margin-bottom:14px"><small class="mut">Nama siswa</small><br><b style="color:var(--navy)">${esc(U.name)}</b></div><div class="fld"><label class="lb" for="phoneTarget">Tanggal izin</label><input id="phoneTarget" data-f="permissionDate" type="date" min="${phoneTomorrow()}" value="${esc(target)}"></div>
-    ${PHONE.error ? `<p class="tip">${esc(PHONE.error)}</p>` : PHONE.loading && !PHONE.rows ? '<p class="mut">Memuat permohonan…</p>' : form}</div>
+    ${PHONE.error ? `<p class="tip">${esc(PHONE.error)}</p><button class="btn sec sm" type="button" data-act="izreload">Coba lagi</button>` : PHONE.loading && !PHONE.rows ? '<p class="mut">Memuat permohonan…</p>' : form}</div>
     <section class="card pad"><h2>Riwayat permohonan</h2>${mine.length ? mine.map(x => `<div class="lgl"><b>${fd(x.d)}</b><span class="ac">${sb(x.choice)}${sb(x.st)}</span></div>`).join('') : '<p class="mut">Belum ada riwayat.</p>'}</section>`;
   }
   F.date = F.date === undefined ? t : F.date;
@@ -1260,7 +1260,7 @@ function openLb(id, i) {
 }
 
 /* ---------- event global ---------- */
-const ANN_ACT = new Set(['anadd', 'anedit', 'andel', 'anpin']), ANY = new Set(['nav', 'drawer', 'logout', 'lb', 'annreload', 'asasfile', 'kasreload']), ASAS_EDIT = new Set(['asasadd', 'asasedit', 'asasdel', 'asasreload']), KAS = new Set(['kasadd', 'kasedit', 'kasdel']);
+const ANN_ACT = new Set(['anadd', 'anedit', 'andel', 'anpin']), ANY = new Set(['nav', 'drawer', 'logout', 'lb', 'annreload', 'asasfile', 'kasreload', 'izreload']), ASAS_EDIT = new Set(['asasadd', 'asasedit', 'asasdel', 'asasreload']), KAS = new Set(['kasadd', 'kasedit', 'kasdel']);
 function allowed(act) { if (act === 'pwtog') return true; if (!U) return false; if (act === 'lb') return true; if (['aladd','aledit','aldel','phadd','phdel'].includes(act)) return galCan(); if (act === 'galreload') return true; if (ANY.has(act)) return true; if (act === 'summarkbulk') return isT() || isP(); if (PADM.has(act) || ADMIN_SUMMARY.has(act)) return isP(); if (ANN_ACT.has(act) || ASAS_EDIT.has(act)) return isT() || isP(); if (isP()) return false; if (SUMB.has(act)) return true; if (SUMS.has(act)) return !isT(); if (KAS.has(act)) return canKas(); if (act === 'izme') return !isT(); return isT(); }
 document.addEventListener('click', (e) => {
   const a = e.target.closest('[data-act]'); if (!a) return;
