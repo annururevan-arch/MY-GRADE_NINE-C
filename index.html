@@ -517,7 +517,7 @@ function todayPanel() {
 
 /* ---------- navigasi & shell ---------- */
 const NAVS = {
-  admin: [['akun', 'Manajemen Akun', 'key'], ['summary_mass', 'Input Summary Book Massal', 'bookcheck'], ['asas', 'Menu ASAS', 'graduation-cap'], ['pengumuman', 'Pengumuman', 'megaphone'], ['pengaturan', 'Pengaturan', 'settings']],
+  admin: [['akun', 'Manajemen Akun', 'key'], ['summary_mass', 'Input Summary Book Massal', 'bookcheck'], ['asas', 'Menu ASAS', 'graduation-cap'], ['galeri', 'Galeri', 'image'], ['pengumuman', 'Pengumuman', 'megaphone'], ['pengaturan', 'Pengaturan', 'settings']],
   student: [['dash', 'Dashboard', 'home'], ['profil', 'Profil Kelas', 'school'], ['struktur', 'Struktur Kelas', 'network'], ['jadwal', 'Jadwal Pelajaran & Piket', 'calendar'], ['galeri', 'Galeri', 'image'], ['summary', 'Summary Book', 'bookcheck'], ['asas', 'Menu ASAS', 'graduation-cap'], ['bta', 'BTA', 'book'], ['kas', 'Kas Kelas', 'wallet'], ['izin', 'Permission to Carry a Cell Phone', 'phone']],
   teacher: [['dash', 'Dashboard', 'home'], ['siswa', 'Data Siswa', 'users'], ['profil', 'Profil Kelas', 'school'], ['struktur', 'Struktur Kelas', 'network'], ['jadwal', 'Jadwal Pelajaran & Piket', 'calendar'], ['galeri', 'Galeri', 'image'], ['summary', 'Summary Book', 'bookcheck'], ['asas', 'Menu ASAS', 'graduation-cap'], ['bta', 'BTA', 'book'], ['kas', 'Kas Kelas', 'wallet'], ['izin', 'Permission to Carry a Cell Phone', 'phone'], ['pengumuman', 'Pengumuman', 'megaphone'], ['pengaturan', 'Pengaturan', 'settings']],
 };
@@ -578,21 +578,78 @@ function pJadwal() {
     <p class="sub">Piket</p>${S.duty[n].length ? `<div class="chips">${S.duty[n].map((x, i) => `<span>${esc(x)}${t ? `<button data-act="ddel" data-d="${n}" data-i="${i}" aria-label="Hapus ${esc(x)}">${ic('x')}</button>` : ''}</span>`).join('')}</div>` : '<p class="mut">Belum ada kelompok piket.</p>'}
     ${t ? `<p style="margin-top:8px"><button class="btn sec sm" data-act="dadd" data-d="${n}">${ic('plus')}Anggota piket</button></p>` : ''}</section>`).join('')}</div>`;
 }
-const ph = (h, label, big) => `<div class="ph" style="background:linear-gradient(135deg,hsl(${h} 55% 30%),hsl(${h + 20} 50% 48%))"><em>DEMO</em>${esc(label)}</div>`;
-function pGaleri() {
-  return hd('Galeri', 'Dokumentasi kegiatan kelas IX C. Foto di preview adalah placeholder DEMO.', isT() ? `<button class="btn pri" data-act="aladd">${ic('plus')}Album Baru</button>` : '') +
-    `<div class="card pad fb">${fin('q', 'Cari album', { ph: 'Judul atau deskripsi' })}${fin('cat', 'Kategori', { opts: [['', 'Semua kategori'], ...[...new Set(S.albums.map((a) => a.cat).filter(Boolean))].map((c) => [c, c])] })}</div><div id="list">${L.galeri()}</div>`;
+const GAL = { uid: null, loaded: false, loading: false, err: '', albums: [] };
+const galCan = () => !!U && (isT() || U.id === 'c22d3091-269b-488e-a3ae-4920f2dcf7ee' || U.id === '186b24fc-df6b-4c67-a526-9e82f82a0824');
+const galReset = () => Object.assign(GAL, { uid: U ? U.id : null, loaded: false, loading: false, err: '', albums: [] });
+const galErr = e => e && (e.code === '42501' || e.status === 401 || e.status === 403) ? 'Akun ini tidak memiliki izin untuk tindakan tersebut.' : 'Galeri gagal dimuat/disimpan. Periksa koneksi dan kebijakan Supabase.';
+async function galLoad(force) {
+  if (!SB || !U || GAL.loading || (GAL.loaded && !force)) return;
+  if (GAL.uid !== U.id) galReset();
+  GAL.loading = true; GAL.err = ''; const uid = U.id;
+  try {
+    const a = await SB.from('gallery_albums').select('id,title,category,event_date,description,created_by,created_at,updated_at').order('event_date', { ascending: false }).order('created_at', { ascending: false });
+    if (a.error) throw a.error;
+    const p = await SB.from('gallery_photos').select('id,album_id,storage_path,caption,uploaded_by,created_at').order('created_at', { ascending: true });
+    if (p.error) throw p.error;
+    const photos = p.data || [];
+    await Promise.all(photos.map(async x => { const u = await SB.storage.from('class-gallery').createSignedUrl(x.storage_path, 3600); x.url = u.error ? '' : u.data.signedUrl; }));
+    GAL.albums = (a.data || []).map(x => ({ ...x, photos: photos.filter(p => p.album_id === x.id) }));
+    GAL.loaded = true;
+  } catch (e) { console.error('Galeri:', e); GAL.err = galErr(e); }
+  finally { GAL.loading = false; if (U && U.id === uid && (cur === 'galeri' || cur === 'album')) re(); }
 }
-const L = {};
-L.galeri = () => {
-  const q = (F.q || '').toLowerCase(), c = F.cat || '', al = S.albums.filter((a) => (!c || a.cat === c) && (!q || (a.title + ' ' + a.desc).toLowerCase().includes(q)));
-  return al.length ? `<div class="albums">${al.map((a) => `<div class="card" style="overflow:hidden"><a href="#/album/${a.id}">${a.ph.length ? ph(a.ph[0], 'Foto DEMO') : `<div class="ph" style="background:var(--n50);color:var(--soft)">Album kosong</div>`}<div class="pad"><div class="ac" style="margin-bottom:4px">${a.cat ? bd(a.cat, 'info') : ''}<small class="mut">${fd(a.d)}</small></div><b style="color:var(--navy)">${esc(a.title)}</b><p class="mut" style="font-size:12px">${a.ph.length} foto</p></a></div>${isT() ? `<div style="border-top:1px solid #f1f5f9;padding:4px 8px;text-align:right"><button class="ib" data-act="aledit" data-id="${a.id}" aria-label="Ubah album">${ic('pencil')}</button><button class="ib d" data-act="aldel" data-id="${a.id}" aria-label="Hapus album">${ic('trash')}</button></div>` : ''}</div>`).join('')}</div>` : `<div class="card">${emp('Belum ada album', isT() ? 'Buat album pertama untuk mulai.' : 'Dokumentasi belum tersedia.')}</div>`;
-};
+function galEnsure() { if (!U) return; if (GAL.uid !== U.id) galReset(); if (!GAL.loaded && !GAL.loading) galLoad(); }
+const galFind = id => GAL.albums.find(x => x.id === id);
+const galPhoto = id => GAL.albums.flatMap(x => x.photos || []).find(x => x.id === id);
+function pGaleri() {
+  galEnsure(); const cats = [...new Set(GAL.albums.map(a => a.category).filter(Boolean))];
+  const head = hd('Galeri', 'Dokumentasi kegiatan kelas IX C. Foto tersimpan di Supabase dan dapat dilihat oleh pengguna yang login.', galCan() ? `<button class="btn pri" data-act="aladd">${ic('plus')}Album Baru</button>` : '');
+  if (!GAL.loaded) return head + `<section class="card pad"><p class="mut">${GAL.err ? esc(GAL.err) : GAL.loading ? 'Memuat album dan foto…' : 'Data Galeri belum tersedia.'}</p><button class="btn sec sm" data-act="galreload">Muat ulang</button></section>`;
+  const q = (F.q || '').toLowerCase(), c = F.cat || '', albums = GAL.albums.filter(a => (!c || a.category === c) && (!q || (a.title + ' ' + a.description).toLowerCase().includes(q)));
+  return head + `<div class="card pad fb">${fin('q', 'Cari album', { ph: 'Judul atau deskripsi' })}${fin('cat', 'Kategori', { opts: [['', 'Semua kategori'], ...cats.map(x => [x, x])] })}</div><div id="list">${albums.length ? '<div class="albums">' + albums.map(a => `<div class="card" style="overflow:hidden"><a href="#/album/${a.id}">${a.photos[0] && a.photos[0].url ? `<img src="${esc(a.photos[0].url)}" alt="${esc(a.title)}" style="width:100%;aspect-ratio:16/10;object-fit:cover;background:var(--n50)">` : '<div class="ph" style="background:var(--n50);color:var(--soft)">Album kosong</div>'}<div class="pad"><div class="ac" style="margin-bottom:4px">${a.category ? bd(a.category, 'info') : ''}<small class="mut">${fd(a.event_date)}</small></div><b style="color:var(--navy)">${esc(a.title)}</b><p class="mut" style="font-size:12px">${a.photos.length} foto</p></div></a>${galCan() ? `<div style="border-top:1px solid #f1f5f9;padding:4px 8px;text-align:right"><button class="ib" data-act="aledit" data-id="${a.id}" aria-label="Ubah album">${ic('pencil')}</button><button class="ib d" data-act="aldel" data-id="${a.id}" aria-label="Hapus album">${ic('trash')}</button></div>` : ''}</div>`).join('') + '</div>' : `<div class="card">${emp('Belum ada album', galCan() ? 'Buat album pertama untuk mulai.' : 'Dokumentasi belum tersedia.')}</div>`}</div>`;
+}
 function pAlbum() {
-  const a = S.albums.find((x) => x.id === +ARG);
+  galEnsure(); const a = galFind(ARG);
+  if (!GAL.loaded) return hd('Galeri', 'Memuat album…') + '<div class="card pad">Memuat foto…</div>';
   if (!a) return `<div class="card">${emp('Album tidak ditemukan')}</div><p style="margin-top:12px"><a class="btn sec" href="#/galeri">Kembali</a></p>`;
-  return `<a href="#/galeri" style="display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--soft);margin-bottom:10px">${ic('chevl')}Semua album</a>` + hd(a.title, a.desc, `${a.cat ? bd(a.cat, 'info') : ''}<span class="mut">${fd(a.d)}</span>${isT() ? `<button class="btn pri" data-act="phadd" data-id="${a.id}">${ic('plus')}Tambah foto (DEMO)</button>` : ''}`) +
-    (a.ph.length ? `<div class="photos">${a.ph.map((h, i) => `<div class="pw"><button class="ph" style="background:linear-gradient(135deg,hsl(${h} 55% 30%),hsl(${h + 20} 50% 48%))" data-act="lb" data-id="${a.id}" data-i="${i}" aria-label="Lihat foto ${i + 1}"><em>DEMO</em>Foto ${i + 1}</button>${isT() ? `<button class="ib d" data-act="phdel" data-id="${a.id}" data-i="${i}" aria-label="Hapus foto">${ic('trash')}</button>` : ''}</div>`).join('')}</div>` : `<div class="card">${emp('Album masih kosong')}</div>`);
+  const photos = a.photos || [];
+  return `<a href="#/galeri" style="display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--soft);margin-bottom:10px">${ic('chevl')}Semua album</a>` + hd(a.title, a.description, `${a.category ? bd(a.category, 'info') : ''}<span class="mut">${fd(a.event_date)}</span>${galCan() ? `<button class="btn pri" data-act="phadd" data-id="${a.id}">${ic('plus')}Unggah foto</button>` : ''}`) + (photos.length ? `<div class="photos">${photos.map(p => `<div class="pw"><button class="ph" style="padding:0;background:var(--n50);overflow:hidden" data-act="lb" data-id="${p.id}" aria-label="Lihat foto"><img src="${esc(p.url || '')}" alt="${esc(p.caption || a.title)}" style="width:100%;height:100%;max-height:280px;object-fit:cover"></button>${p.caption ? `<small class="mut">${esc(p.caption)}</small>` : ''}${galCan() ? `<button class="ib d" data-act="phdel" data-id="${p.id}" aria-label="Hapus foto">${ic('trash')}</button>` : ''}</div>`).join('')}</div>` : `<div class="card">${emp('Album masih kosong')}</div>`);
+}
+function galModal(title, body, onSave, submitLabel) {
+  const el = document.createElement('div'); el.className = 'ov';
+  el.innerHTML = `<div class="dlg" role="dialog" aria-modal="true"><div class="dh" style="display:flex;justify-content:space-between"><h2>${esc(title)}</h2><button type="button" class="ib" data-x>${ic('x')}</button></div><form>${body}<div class="df"><button type="button" class="btn sec" data-x>Batal</button><button class="btn pri" type="submit">${submitLabel || 'Simpan'}</button></div></form></div>`;
+  el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-x]')) el.remove(); });
+  el.querySelector('form').addEventListener('submit', async e => { e.preventDefault(); const b = e.target.querySelector('button[type=submit]'); if (b.disabled) return; b.disabled = true; b.textContent = 'Menyimpan…'; const ok = await onSave(new FormData(e.target), e.target); if (ok !== false) el.remove(); else { b.disabled = false; b.textContent = submitLabel || 'Simpan'; } });
+  document.body.appendChild(el);
+}
+function galAlbumForm(a) {
+  if (!galCan()) return deny();
+  galModal(a ? 'Ubah album' : 'Album baru', fld('Judul album', 'title', { v: a?.title, req: true, max: 120 }) + fld('Kategori', 'category', { v: a?.category || '', ph: 'Contoh: Kegiatan, Lomba' }) + fld('Tanggal kegiatan', 'event_date', { type: 'date', v: a?.event_date || ymd(), req: true }) + fld('Deskripsi', 'description', { v: a?.description || '', rows: 3, max: 1000 }),
+    async f => { const o = { title: String(f.get('title') || '').trim(), category: String(f.get('category') || '').trim() || null, event_date: f.get('event_date'), description: String(f.get('description') || '').trim() }; if (!o.title || !o.event_date) { toast('Judul dan tanggal wajib diisi.', 'err'); return false; }
+      try { const q = a ? await SB.from('gallery_albums').update(o).eq('id', a.id).select().single() : await SB.from('gallery_albums').insert({ ...o, created_by: U.id }).select().single(); if (q.error) throw q.error; toast(a ? 'Album diperbarui.' : 'Album berhasil dibuat.'); await galLoad(true); return true; } catch (e) { toast(galErr(e), 'err'); return false; }
+    }, a ? 'Simpan perubahan' : 'Buat album');
+}
+function galUploadForm(albumId) {
+  if (!galCan()) return deny();
+  galModal('Unggah foto', '<div class="fld"><label class="lb" for="gal-file">Pilih foto (JPG, PNG, WebP · maksimal 10 MB)</label><input id="gal-file" name="photo" type="file" accept="image/jpeg,image/png,image/webp" required></div>' + fld('Keterangan foto (opsional)', 'caption', { max: 300 }),
+    async (f, form) => { const file = form.querySelector('input[name=photo]').files[0]; if (!file || !/^image\/(jpeg|png|webp)$/.test(file.type) || file.size > 10 * 1024 * 1024) { toast('Pilih foto JPG, PNG, atau WebP dengan ukuran maksimal 10 MB.', 'err'); return false; }
+      const ext = ({ 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' })[file.type], path = U.id + '/' + albumId + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 10) + '.' + ext;
+      try { const up = await SB.storage.from('class-gallery').upload(path, file, { contentType: file.type, upsert: false }); if (up.error) throw up.error; const ins = await SB.from('gallery_photos').insert({ album_id: albumId, storage_path: path, caption: String(f.get('caption') || '').trim(), uploaded_by: U.id }); if (ins.error) { await SB.storage.from('class-gallery').remove([path]); throw ins.error; } toast('Foto berhasil diunggah.'); await galLoad(true); return true; } catch (e) { console.error('Unggah Galeri:', e); toast(galErr(e), 'err'); return false; }
+    }, 'Unggah foto');
+}
+async function galDeletePhoto(id) {
+  if (!galCan()) return deny(); const p = galPhoto(id); if (!p || !confirm('Hapus foto ini secara permanen?')) return;
+  try { const rm = await SB.storage.from('class-gallery').remove([p.storage_path]); if (rm.error) throw rm.error; const del = await SB.from('gallery_photos').delete().eq('id', id); if (del.error) throw del.error; toast('Foto dihapus.'); await galLoad(true); } catch (e) { toast(galErr(e), 'err'); }
+}
+async function galDeleteAlbum(id) {
+  if (!galCan()) return deny(); const a = galFind(id); if (!a || !confirm('Hapus album "' + a.title + '" beserta ' + a.photos.length + ' foto?')) return;
+  try { const paths = a.photos.map(p => p.storage_path); if (paths.length) { const rm = await SB.storage.from('class-gallery').remove(paths); if (rm.error) throw rm.error; } const del = await SB.from('gallery_albums').delete().eq('id', id); if (del.error) throw del.error; toast('Album dan fotonya dihapus.'); location.hash = '#/galeri'; await galLoad(true); } catch (e) { toast(galErr(e), 'err'); }
+}
+function openGalleryPhoto(id) {
+  const p = galPhoto(id); if (!p || !p.url) return;
+  const el = document.createElement('div'); el.className = 'lbx'; el.setAttribute('role', 'dialog');
+  el.innerHTML = `<div style="display:flex;justify-content:flex-end;padding:10px"><button class="ib" data-c aria-label="Tutup">${ic('x')}</button></div><div class="m"><img src="${esc(p.url)}" alt="${esc(p.caption || 'Foto galeri')}" style="max-width:94vw;max-height:78vh;object-fit:contain"></div><p>${esc(p.caption || 'Foto Galeri')}</p>`;
+  el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-c]')) el.remove(); }); document.body.appendChild(el);
 }
 function pSummarySim() {
   if (!isT()) {
