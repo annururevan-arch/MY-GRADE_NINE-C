@@ -1139,7 +1139,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('input', (e) => {
   const k = e.target.dataset && e.target.dataset.f; if (!k) return;
   F[k] = e.target.value;
-  const l = $('#list'); if (cur === 'galeri') { re(); } else if (l) l.innerHTML = L[cur]();
+  const l = $('#list'); if (cur === 'galeri') { const key = k, value = e.target.value; re(); const n = $('[data-f="' + key + '"]'); if (n) { n.focus(); n.value = value; try { n.setSelectionRange(value.length, value.length); } catch (_) {} } } else if (l) l.innerHTML = L[cur]();
   const u = $('#unf'); if (u) u.innerHTML = unfHtml();
   if (cur === 'izin') { /* statistik ikut diperbarui */ const keep = document.activeElement; render(); const n = $(`[data-f="${k}"]`); if (n && keep && keep.dataset.f === k) { n.focus(); try { n.setSelectionRange(n.value.length, n.value.length); } catch (_) {} } }
   if (cur === 'kas' || cur === 'summary') { /* ringkasan tidak bergantung filter */ }
