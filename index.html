@@ -731,29 +731,79 @@ L.kas = () => {
   return rows.length ? tbl(['Tanggal', 'Keterangan', 'Jenis', 'Nominal', canKas() ? 'Aksi' : ''].filter(Boolean), rows.map((k) => `<tr><td style="white-space:nowrap">${fd(k.d)}</td><td>${esc(k.desc)}</td><td>${sb(k.type)}</td><td class="${k.type === 'income' ? 'inc' : 'exp'}" style="white-space:nowrap;text-align:right">${k.type === 'income' ? '+' : '−'}${rp(k.amt)}</td>${canKas() ? `<td class="act"><button class="ib" data-act="kasedit" data-id="${k.id}" aria-label="Ubah">${ic('pencil')}</button><button class="ib d" data-act="kasdel" data-id="${k.id}" aria-label="Hapus">${ic('trash')}</button></td>` : ''}</tr>`).join('')) : emp('Belum ada transaksi', 'Riwayat transaksi akan tampil di sini.');
 };
 const POLICY = 'Persetujuan di sini adalah pencatatan administrasi kelas dan tetap mengikuti kebijakan sekolah.';
-const phoneFields = (v = {}) => `<div class="fld"><p class="lb">Pilihan <span style="color:#dc2626">*</span></p><div class="rad"><label><input type="radio" name="choice" value="bringing" required${v.choice === 'bringing' ? ' checked' : ''}>Bringing a Cell Phone</label><label><input type="radio" name="choice" value="not_bringing"${v.choice === 'not_bringing' ? ' checked' : ''}>Not Bringing a Cell Phone</label></div></div>
-  <div class="bring" ${v.choice === 'bringing' ? '' : 'hidden'}>${fld('Merek / jenis HP', 'model', { v: v.model, ph: 'Contoh: merek dan tipe HP', max: 80 })}${fld('Alasan / keperluan membawa HP', 'reason', { v: v.reason, rows: 3, max: 300 })}</div>${fld('Keterangan tambahan', 'notes', { v: v.notes, rows: 2, max: 300 })}`;
+const phoneTomorrow = () => { const d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })); d.setDate(d.getDate() + 1); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+const phoneFields = (v = {}) => `${fld('Tanggal izin', 'permission_date', { type: 'date', v: v.permission_date || phoneTomorrow(), min: phoneTomorrow(), req: true })}<div class="fld"><p class="lb">Pilihan <span style="color:#dc2626">*</span></p><div class="rad"><label><input type="radio" name="choice" value="bringing" required${v.choice === 'bringing' ? ' checked' : ''}>Bringing a Cell Phone</label><label><input type="radio" name="choice" value="not_bringing"${v.choice === 'not_bringing' ? ' checked' : ''}>Not Bringing a Cell Phone</label></div></div>
+  <div class="bring" ${v.choice === 'bringing' ? '' : 'hidden'}>${fld('Merek / jenis HP', 'model', { v: v.model, ph: 'Contoh: merek dan tipe HP', max: 80, req: v.choice === 'bringing' })}${fld('Alasan / keperluan membawa HP', 'reason', { v: v.reason, rows: 3, max: 300, req: v.choice === 'bringing' })}</div>${fld('Keterangan tambahan', 'notes', { v: v.notes, rows: 2, max: 300 })}`;
+const PHONE = { rows: null, loading: false, error: '', uid: null };
+async function phoneLoad(force = false) {
+  if (!SB || !U || PHONE.loading || (PHONE.rows && !force && PHONE.uid === U.id)) return;
+  PHONE.loading = true; PHONE.error = '';
+  try {
+    let q = SB.from('phone_permissions').select('*').order('permission_date', { ascending: false }).order('submitted_at', { ascending: false });
+    if (!isT()) {
+      const sn = stu(U.sid)?.no;
+      if (!sn) throw new Error('Akun siswa belum terhubung ke nomor siswa (profiles.student_no). Hubungi guru.');
+      q = q.eq('student_no', sn);
+    }
+    const { data, error } = await q;
+    if (error) throw error;
+    PHONE.rows = (data || []).map(x => {
+      const st = S.students.find(a => a.no === Number(x.student_no));
+      return { id:x.id, sid:st ? st.id : null, student_no:Number(x.student_no), d:x.permission_date, permission_date:x.permission_date, choice:x.choice, model:x.phone_model || '', reason:x.purpose || '', notes:x.notes || '', st:x.status, tn:x.teacher_note || '', submitted_at:x.submitted_at };
+    });
+    PHONE.uid = U.id;
+  } catch(e) { console.error('Izin HP:',e); PHONE.error = e.message || 'Gagal memuat permohonan.'; PHONE.rows = null; }
+  finally { PHONE.loading = false; if (U && cur === 'izin') re(); }
+}
+async function phoneSave(row, values) {
+  try {
+    if (!SB || !U) throw new Error('Supabase belum tersedia atau sesi berakhir.');
+    if (!values.permission_date || values.permission_date <= ymd()) throw new Error('Tanggal izin harus minimal besok. Formulir dikirim paling lambat sehari sebelumnya.');
+    const payload = { permission_date:values.permission_date, choice:values.choice, phone_model:values.model || null, purpose:values.reason || null, notes:values.notes || null };
+    if (row) {
+      const { error } = await SB.from('phone_permissions').update(payload).eq('id', row.id);
+      if (error) throw error;
+    } else {
+      const sn = stu(U.sid)?.no;
+      if (!sn) throw new Error('Akun siswa belum terhubung ke nomor siswa (profiles.student_no). Hubungi guru.');
+      const { error } = await SB.from('phone_permissions').insert({ ...payload, student_no:sn });
+      if (error) throw error;
+    }
+    await phoneLoad(true); toast('Permohonan berhasil disimpan.');
+  } catch(e) { console.error('Simpan izin HP:',e); toast('Gagal menyimpan: ' + (e.message || 'Periksa koneksi dan izin.'), 'err'); }
+}
+async function phoneReview(id, status, note = '') {
+  try {
+    const { error } = await SB.from('phone_permissions').update({ status, teacher_note:note, reviewed_by:U.id, reviewed_at:new Date().toISOString() }).eq('id', id);
+    if (error) throw error;
+    await phoneLoad(true); toast(status === 'approved' ? 'Permohonan disetujui.' : status === 'rejected' ? 'Permohonan ditolak.' : 'Peninjauan diperbarui.');
+  } catch(e) { console.error('Tinjau izin HP:',e); toast('Gagal memperbarui status: ' + (e.message || 'Periksa izin.'), 'err'); }
+}
 function pIzin() {
-  const t = ymd();
+  if (PHONE.uid !== (U && U.id)) { PHONE.rows = null; PHONE.uid = U && U.id; PHONE.error = ''; }
+  if (SB && U && !PHONE.rows && !PHONE.loading && !PHONE.error) phoneLoad();
+  const t = ymd(), rows = PHONE.rows || [];
   if (!isT()) {
-    const mine = S.izin.filter((x) => x.sid === U.sid).sort((a, b) => b.d.localeCompare(a.d)), cu = mine.find((x) => x.d === t);
-    return hd('Permission to Carry a Cell Phone', 'Wajib diisi seluruh siswa setiap hari, baik membawa maupun tidak membawa HP.') + `<div class="note n-info">${POLICY}</div>
-    <div class="card pad" style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:14px"><div><small class="mut">Nama siswa</small><br><b style="color:var(--navy)">${esc(U.name)}</b></div><div style="text-align:right"><small class="mut">Tanggal</small><br><b style="color:var(--navy)">${fd(t)}</b></div></div>
-    ${cu ? `<div class="ac" style="margin-bottom:10px">${sb(cu.st)}${sb(cu.choice)}</div>${cu.model ? `<p><span class="mut">HP:</span> ${esc(cu.model)}</p>` : ''}${cu.reason ? `<p><span class="mut">Keperluan:</span> ${esc(cu.reason)}</p>` : ''}${cu.notes ? `<p><span class="mut">Keterangan:</span> ${esc(cu.notes)}</p>` : ''}${cu.tn ? `<p class="tip"><b>Catatan guru:</b> ${esc(cu.tn)}</p>` : ''}${cu.st === 'pending' ? `<p style="margin-top:12px"><button class="btn sec" data-act="izme" data-id="${cu.id}">${ic('pencil')}Ubah formulir</button></p>` : ''}` : `<form id="izf">${phoneFields()}<button class="btn pri">Kirim formulir</button></form>`}</div>
-    <section class="card pad"><h2>Riwayat permohonan</h2>${mine.length ? mine.map((x) => `<div class="lgl"><b>${fd(x.d)}</b><span class="ac">${sb(x.choice)}${sb(x.st)}</span></div>`).join('') : '<p class="mut">Belum ada riwayat.</p>'}</section>`;
+    const target = F.permissionDate || phoneTomorrow();
+    const mine = [...rows].sort((a,b) => b.d.localeCompare(a.d)), cu = mine.find(x => x.d === target);
+    const form = cu ? (cu.st === 'pending' ? `<div class="ac" style="margin-bottom:10px">${sb(cu.st)}${sb(cu.choice)}</div><p class="mut">Permohonan untuk ${fd(cu.d)} sudah dikirim. Kamu masih dapat mengubahnya selama status Menunggu.</p><button class="btn sec" type="button" data-act="izme" data-id="${cu.id}">${ic('pencil')}Ubah formulir</button>` : `<div class="ac" style="margin-bottom:10px">${sb(cu.st)}${sb(cu.choice)}</div><p class="mut">Permohonan untuk ${fd(cu.d)} telah ditinjau guru.</p>${cu.tn ? `<p class="tip"><b>Catatan guru:</b> ${esc(cu.tn)}</p>` : ''}`) : `<form id="izf">${phoneFields({permission_date:target})}<button class="btn pri">Kirim formulir</button></form>`;
+    return hd('Permission to Carry a Cell Phone', 'Wajib diisi seluruh siswa setiap hari untuk tanggal izin yang dipilih, baik membawa maupun tidak membawa HP.') + `<div class="note n-info">${POLICY} Pilih tanggal izin terlebih dahulu; pengajuan hanya dapat dikirim sebelum tanggal tersebut.</div>
+    <div class="card pad" style="margin-bottom:14px"><div style="margin-bottom:14px"><small class="mut">Nama siswa</small><br><b style="color:var(--navy)">${esc(U.name)}</b></div><div class="fld"><label class="lb" for="phoneTarget">Tanggal izin</label><input id="phoneTarget" data-f="permissionDate" type="date" min="${phoneTomorrow()}" value="${esc(target)}"></div>
+    ${PHONE.error ? `<p class="tip">${esc(PHONE.error)}</p>` : PHONE.loading && !PHONE.rows ? '<p class="mut">Memuat permohonan…</p>' : form}</div>
+    <section class="card pad"><h2>Riwayat permohonan</h2>${mine.length ? mine.map(x => `<div class="lgl"><b>${fd(x.d)}</b><span class="ac">${sb(x.choice)}${sb(x.st)}</span></div>`).join('') : '<p class="mut">Belum ada riwayat.</p>'}</section>`;
   }
   F.date = F.date === undefined ? t : F.date;
-  const un = F.date ? act().filter((s) => !S.izin.some((x) => x.sid === s.id && x.d === F.date)) : [], sel = F.all ? S.izin : S.izin.filter((x) => x.d === F.date);
-  return hd('Permission to Carry a Cell Phone', 'Formulir wajib untuk seluruh siswa. Siswa yang belum mengisi tidak otomatis dianggap tidak membawa HP.') + `<div class="note n-info">${POLICY}</div>
-  <div class="grid g3" style="grid-template-columns:repeat(2,1fr);margin-bottom:14px">${stat('phone', 'Belum mengisi', F.date ? un.length : '—', F.date ? fd(F.date) : 'Pilih satu tanggal')}${stat('phone', 'Membawa HP', sel.filter((x) => x.choice === 'bringing').length)}${stat('phone', 'Tidak membawa', sel.filter((x) => x.choice === 'not_bringing').length)}${stat('phone', 'Menunggu (Pending)', sel.filter((x) => x.st === 'pending').length)}</div>
-  <div class="card pad fb">${fin('q', 'Cari nama')}${fin('date', 'Tanggal', { type: 'date' })}${fin('st', 'Status', { opts: [['', 'Semua'], ['pending', 'Pending'], ['approved', 'Approved'], ['rejected', 'Rejected']] })}${fin('choice', 'Pilihan', { opts: [['', 'Semua'], ['bringing', 'Membawa HP'], ['not_bringing', 'Tidak membawa']] })}</div>${list('izin')}
-  <section class="card pad" style="margin-top:14px" id="unf">${unfHtml()}</section>`;
+  const allRows = rows.filter(x => (!F.date || x.d === F.date)), q = (F.q || '').toLowerCase();
+  const filtered = allRows.filter(x => (!F.st || x.st === F.st) && (!F.choice || x.choice === F.choice) && (!q || (stu(x.sid)?.name || '').toLowerCase().includes(q)));
+  const activeStudents = act(), un = F.date ? activeStudents.filter(st => !rows.some(x => x.student_no === st.no && x.d === F.date)) : [];
+  const inc = allRows.filter(x => x.choice === 'bringing').length, no = allRows.filter(x => x.choice === 'not_bringing').length, pending = allRows.filter(x => x.st === 'pending').length;
+  const table = filtered.length ? tbl(['Siswa','Tanggal','Pilihan','Detail','Status','Aksi'], filtered.map(x => `<tr><td><b>${esc(stu(x.sid)?.name || ('No. ' + x.student_no))}</b></td><td style="white-space:nowrap">${fd(x.d)}</td><td>${sb(x.choice)}</td><td class="mut" style="font-size:12px;max-width:240px">${x.model ? '<b>HP:</b> ' + esc(x.model) + '<br>' : ''}${x.reason ? '<b>Keperluan:</b> ' + esc(x.reason) + '<br>' : ''}${x.notes ? '<b>Keterangan:</b> ' + esc(x.notes) + '<br>' : ''}${x.tn ? '<b>Catatan guru:</b> ' + esc(x.tn) : ''}</td><td>${sb(x.st)}</td><td class="act">${x.st === 'pending' ? `<button class="btn ok sm" data-act="izset" data-id="${x.id}" data-v="approved">Setujui</button><button class="btn sec sm" data-act="izset" data-id="${x.id}" data-v="rejected">Tolak</button>` : ''}<button class="ib" data-act="iztinjau" data-id="${x.id}" aria-label="Tinjau">${ic('pencil')}</button></td></tr>` ).join('')) : emp('Tidak ada data', 'Ubah tanggal atau filter, atau tunggu siswa mengirim permohonan.');
+  return hd('Permission to Carry a Cell Phone', 'Rekap permohonan nyata dari Supabase. Siswa yang belum mengisi tidak otomatis dianggap tidak membawa HP.') + `<div class="note n-info">${POLICY}</div>
+  ${PHONE.error ? `<div class="note lerr">${esc(PHONE.error)} <button class="btn sec sm" data-act="izreload">Coba lagi</button></div>` : PHONE.loading && !PHONE.rows ? '<div class="card pad"><p class="mut">Memuat permohonan…</p></div>' : ''}
+  <div class="grid g3" style="grid-template-columns:repeat(2,1fr);margin-bottom:14px">${stat('phone','Belum mengisi',F.date ? un.length : '—',F.date ? fd(F.date) : 'Pilih satu tanggal')}${stat('phone','Membawa HP',inc)}${stat('phone','Tidak membawa',no)}${stat('phone','Menunggu',pending)}</div>
+  <div class="card pad fb">${fin('q','Cari nama')}${fin('date','Tanggal',{type:'date'})}${fin('st','Status',{opts:[['','Semua'],['pending','Menunggu'],['approved','Disetujui'],['rejected','Ditolak']]})}${fin('choice','Pilihan',{opts:[['','Semua'],['bringing','Membawa HP'],['not_bringing','Tidak membawa']]})}</div><div class="card" id="list" style="overflow:hidden">${table}</div>
+  <section class="card pad" style="margin-top:14px"><h2>Belum mengisi · ${F.date ? fd(F.date) : 'Pilih tanggal'} ${F.date ? bd(un.length, un.length ? 'warn' : 'ok') : ''}</h2>${F.date ? (un.length ? `<div class="chips">${un.map(st => `<span style="background:var(--warnb);color:#92400e">${esc(st.name)}</span>`).join('')}</div>` : '<p class="mut">Semua siswa aktif sudah mengisi formulir.</p>') : '<p class="mut">Pilih tanggal untuk melihat siswa yang belum mengisi.</p>'}</section>`;
 }
-function unfHtml() { const un = F.date ? act().filter((s) => !S.izin.some((x) => x.sid === s.id && x.d === F.date)) : []; return F.date ? `<h2>Belum mengisi · ${fd(F.date)} ${bd(un.length, un.length ? 'warn' : 'ok')}</h2>${un.length ? `<div class="chips">${un.map((s) => `<span style="background:var(--warnb);color:#92400e">${esc(s.name)}</span>`).join('')}</div>` : '<p class="mut">Semua siswa aktif sudah mengisi formulir.</p>'}` : '<p class="mut">Pilih satu tanggal untuk melihat siswa yang belum mengisi.</p>'; }
-L.izin = () => {
-  const q = (F.q || '').toLowerCase(), rows = S.izin.filter((x) => (!F.date || x.d === F.date) && (!F.st || x.st === F.st) && (!F.choice || x.choice === F.choice) && (!q || (stu(x.sid)?.name || '').toLowerCase().includes(q))).sort((a, b) => b.d.localeCompare(a.d) || b.id - a.id);
-  return rows.length ? tbl(['Siswa', 'Tanggal', 'Pilihan', 'Detail', 'Status', 'Aksi'], rows.map((x) => `<tr><td><b>${esc(stu(x.sid)?.name)}</b></td><td style="white-space:nowrap">${fd(x.d)}</td><td>${sb(x.choice)}</td><td class="mut" style="font-size:12px;max-width:240px">${x.model ? '<b>HP:</b> ' + esc(x.model) + '<br>' : ''}${x.reason ? '<b>Keperluan:</b> ' + esc(x.reason) + '<br>' : ''}${x.tn ? '<b>Catatan guru:</b> ' + esc(x.tn) : ''}</td><td>${sb(x.st)}</td><td class="act">${x.st === 'pending' ? `<button class="btn ok sm" data-act="izset" data-id="${x.id}" data-v="approved">Setujui</button>` : ''}<button class="ib" data-act="iztinjau" data-id="${x.id}" aria-label="Tinjau">${ic('pencil')}</button></td></tr>`).join('')) : emp('Tidak ada data', 'Ubah tanggal atau filter, atau tunggu siswa mengisi formulir.');
-};
 function pSiswa() {
   return hd('Data Siswa', `${act().length} siswa aktif · akun login dikelola oleh wali kelas.`, `<button class="btn sec" data-act="sbulk">${ic('users')}Tambah banyak</button><button class="btn pri" data-act="sadd2">${ic('plus')}Tambah siswa</button>`) +
     `<div class="note n-info">Akun login dikelola di Manajemen Akun. Password disimpan sebagai hash dan tidak pernah ditampilkan ulang. Di preview, pembuatan akun hanya simulasi.</div><div class="card pad fb">${fin('q', 'Cari nama / NIS')}${fin('st', 'Status', { opts: [['', 'Semua'], ['1', 'Aktif'], ['0', 'Nonaktif']] })}</div>${list('siswa')}`;
@@ -965,9 +1015,10 @@ const A = {
   kasadd() { kasForm(); }, kasedit(d) { kasForm((KASDB.rows || []).find(x => String(x.id) === String(d.id))); },
   kasdel(d) { const k = (KASDB.rows || []).find(x => String(x.id) === String(d.id)); if (!k) return; confirmBox('Hapus transaksi?', `${k.desc} (${rp(k.amt)}) akan dihapus dan saldo berubah.`, () => kasDeleteDb(k)); }, kasreload() { KASDB.error=''; kasLoad(true); },
   /* izin */
-  izset(d) { const x = S.izin.find((i) => i.id === +d.id); x.st = d.v; logA(`Guru ${d.v === 'approved' ? 'menyetujui' : 'menolak'} izin HP ${stu(x.sid).name}`); re(); toast(d.v === 'approved' ? 'Permohonan disetujui.' : 'Permohonan ditolak.'); },
-  iztinjau(d) { const x = S.izin.find((i) => i.id === +d.id); modal('Tinjau · ' + stu(x.sid).name, fld('Status', 'st', { v: x.st, opts: [['pending', 'Pending'], ['approved', 'Approved'], ['rejected', 'Rejected']] }) + fld('Catatan guru', 'tn', { v: x.tn, rows: 3, max: 300 }), (f) => { x.st = f.get('st'); x.tn = f.get('tn').trim(); logA('Guru meninjau izin HP ' + stu(x.sid).name); re(); toast('Peninjauan disimpan.'); }); },
-  izme(d) { const x = S.izin.find((i) => i.id === +d.id); if (!x || x.sid !== U.sid) return deny(); modal('Ubah formulir', phoneFields(x), (f) => { const r = readPhone(f); if (r.err) return r.err; Object.assign(x, r.v); re(); toast('Formulir diperbarui.'); }); },
+  izreload() { PHONE.error=''; phoneLoad(true); },
+  izset(d) { if (!isT()) return deny(); phoneReview(d.id, d.v); },
+  iztinjau(d) { if (!isT()) return deny(); const x = (PHONE.rows || []).find(i => String(i.id) === String(d.id)); if (!x) return; modal('Tinjau · ' + (stu(x.sid)?.name || 'Siswa'), fld('Status','st',{v:x.st,opts:[['pending','Menunggu'],['approved','Disetujui'],['rejected','Ditolak']]}) + fld('Catatan guru','tn',{v:x.tn,rows:3,max:300}), f => { phoneReview(x.id, f.get('st'), f.get('tn').trim()); }); },
+  izme(d) { const x = (PHONE.rows || []).find(i => String(i.id) === String(d.id)); if (!x || isT() || x.sid !== U.sid || x.st !== 'pending') return deny(); modal('Ubah formulir', phoneFields(x), f => { const r = readPhone(f); if (r.err) return r.err; phoneSave(x, {...r.v, permission_date:f.get('permission_date')}); }); },
   /* siswa */
   sadd2() { siForm(); }, sedit2(d) { siForm(stu(d.id)); },
   sbulk() { modal('Tambah banyak siswa (DEMO)', fld('Nama siswa (satu nama per baris)', 'n', { rows: 7, req: true, max: 3000 }), (f) => { const ns = [...new Set(f.get('n').split('\n').map((x) => x.trim()).filter(Boolean))]; if (!ns.length) return 'Masukkan minimal satu nama.'; ns.forEach((n) => { const id = nid(); S.students.push({ id, no: nextNo(), name: n, nis: '', active: true }); S.sum[id] = { st: 'not_submitted', d: null, note: '', h: [] }; }); re(); toast(ns.length + ' siswa ditambahkan (simulasi).'); }); },
@@ -1232,7 +1283,7 @@ document.addEventListener('submit', (e) => {
   const id = e.target.id; if (!id) return; e.preventDefault();
   if (id === 'lf') return doLogin(e.target);
   if (!U) return;
-  if (id === 'izf') { if (isT()) return deny(); const r = readPhone(new FormData(e.target)); if (r.err) return toast(r.err, 'err'); S.izin.push({ id: nid(), sid: U.sid, d: ymd(), st: 'pending', tn: '', ...r.v }); re(); toast('Formulir terkirim. Status: Pending (simulasi).'); }
+  if (id === 'izf') { if (isT()) return deny(); const f = new FormData(e.target), r = readPhone(f); if (r.err) return toast(r.err, 'err'); phoneSave(null, {...r.v, permission_date:f.get('permission_date')}); }
   if (id === 'nf') { if (!isT()) return deny(); const n = new FormData(e.target).get('name').trim(); if (n) { U.name = n; me().name = n; } re(); toast('Nama disimpan (simulasi).'); }
   if (id === 'pf') { if (!isT()) return deny(); const f = new FormData(e.target), a = me(); if (hashPw(f.get('cur'), a.salt) !== a.hash) return toast('Password saat ini salah.', 'err'); if (f.get('nw').length < 10) return toast('Password baru minimal 10 karakter.', 'err'); if (f.get('nw') !== f.get('cf')) return toast('Konfirmasi password tidak sama.', 'err'); a.salt = randHex(8); a.hash = hashPw(f.get('nw'), a.salt); e.target.reset(); toast('Password diganti (simulasi, hanya di memori browser).'); }
 });
