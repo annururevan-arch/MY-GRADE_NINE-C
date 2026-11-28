@@ -209,6 +209,7 @@ code{background:rgba(255,255,255,.1);color:#dbe2ff}
 <div id="toasts" aria-live="polite"></div>
 <noscript><p style="padding:24px">Preview ini membutuhkan JavaScript aktif di browser.</p></noscript>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <script>
 'use strict';
 /* MY GRADE NINE C — HTML Preview. Semua data adalah SIMULASI/DEMO di memori browser (hilang saat halaman dimuat ulang). */
@@ -403,6 +404,7 @@ function modal(title, body, ok, label = 'Simpan', danger = false) {
   });
   document.body.appendChild(el);
   const f = el.querySelector('input:not([type=radio]):not([type=checkbox]),select,textarea'); if (f) f.focus();
+  return el;
 }
 const confirmBox = (title, text, fn) => modal(title, `<p class="tx">${esc(text)}</p>`, () => { fn(); }, 'Hapus', true);
 const fld = (label, name, o = {}) => {
@@ -695,8 +697,19 @@ async function kasLoad(force = false) {
   finally { KASDB.loading = false; if (U && (cur === 'kas' || cur === 'dash')) re(); }
 }
 async function kasSaveDb(k,o) {
-  try { const p={type:o.type,amount:o.amt,description:o.desc,category:o.category || null,transaction_date:o.d}; const r=k ? await SB.from('kas_transactions').update(p).eq('id',k.id) : await SB.from('kas_transactions').insert({...p,created_by:U.id}); if(r.error) throw r.error; await kasLoad(true); toast('Transaksi berhasil disimpan.'); }
-  catch(e) { console.error('Simpan kas:',e); toast('Gagal menyimpan transaksi: '+(e.message || 'Periksa koneksi dan izin.'),'err'); }
+  try {
+    const p={type:o.type,amount:o.amt,description:o.desc,category:o.category || null,transaction_date:o.d,receipt_path:k?.receipt_path || null};
+    if (o.receipt) {
+      const safeName = String(o.receipt.name || 'struk').replace(/[^a-zA-Z0-9._-]/g,'_').slice(-80);
+      const path = U.id + '/' + Date.now() + '-' + Math.random().toString(36).slice(2,8) + '-' + safeName;
+      const up = await SB.storage.from('kas-receipts').upload(path,o.receipt,{contentType:o.receipt.type,upsert:false});
+      if (up.error) throw up.error;
+      p.receipt_path = path;
+    }
+    const r=k ? await SB.from('kas_transactions').update(p).eq('id',k.id) : await SB.from('kas_transactions').insert({...p,created_by:U.id});
+    if(r.error) throw r.error;
+    await kasLoad(true); toast('Transaksi berhasil disimpan.');
+  } catch(e) { console.error('Simpan kas:',e); toast('Gagal menyimpan transaksi: '+(e.message || 'Periksa koneksi dan izin.'),'err'); }
 }
 async function kasDeleteDb(k) { try { const {error}=await SB.from('kas_transactions').delete().eq('id',k.id); if(error) throw error; await kasLoad(true); toast('Transaksi berhasil dihapus.'); } catch(e) { console.error('Hapus kas:',e); toast('Gagal menghapus transaksi: '+(e.message || 'Periksa izin.'),'err'); } }
 function monthsData() {
@@ -1126,7 +1139,47 @@ function sbSet(id, st, d, note) { const r = S.sum[id]; r.st = st; r.d = st === '
 function stForm(r) { modal(r ? 'Ubah Pengurus' : 'Tambah Pengurus', fld('Jabatan', 't', { v: r?.t, req: true, ph: 'Contoh: Seksi Kebersihan', max: 60 }) + `<datalist id="sn">${act().map((s) => sel(s.name)).join('')}</datalist>` + fld('Nama anggota', 'n', { v: r?.n, req: true, list: 'sn', hint: 'Pilih dari daftar siswa DEMO atau ketik nama.' }), (f) => { const t = f.get('t').trim(), n = f.get('n').trim(); if (r) { r.t = t; r.n = n; } else S.struct.push({ id: nid(), t, n }); re(); toast('Struktur kelas disimpan (simulasi).'); }); }
 function alForm(a) { modal(a ? 'Ubah Album' : 'Album Baru', fld('Judul album', 't', { v: a?.title, req: true }) + fld('Kategori', 'c', { v: a?.cat, ph: 'Contoh: Kegiatan' }) + fld('Tanggal kegiatan', 'd', { type: 'date', v: a?.d || ymd() }) + fld('Deskripsi kegiatan', 'x', { v: a?.desc, rows: 3, max: 1000 }), (f) => { const o = { title: f.get('t').trim(), cat: f.get('c').trim(), d: f.get('d'), desc: f.get('x').trim() }; if (a) Object.assign(a, o); else S.albums.unshift({ id: nid(), ph: [], ...o }); logA('Guru menyimpan album galeri'); re(); toast('Album disimpan (simulasi).'); }); }
 function btaForm(r) { modal(r ? 'Ubah catatan BTA' : 'Catat progres BTA', fld('Siswa', 'sid', { v: r?.sid, opts: act().map((s) => [s.id, s.name]) }) + fld('Tanggal kegiatan', 'd', { type: 'date', v: r?.d || ymd(), req: true }) + `<datalist id="sr">${SURAH.map(sel).join('')}</datalist><div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">${fld('Surah', 's', { v: r?.surah, req: true, list: 'sr', max: 60 })}${fld('Ayat terakhir', 'a', { type: 'number', v: r?.ayah, min: 1 })}</div>` + fld('Progres / perkembangan bacaan', 'p', { v: r?.prog, rows: 2 }) + fld('Catatan wali kelas', 'n', { v: r?.note, rows: 2 }), (f) => { const a = f.get('a') ? +f.get('a') : null; if (a !== null && (a < 1 || a > 286)) return 'Ayat terakhir harus angka 1–286.'; const o = { sid: +f.get('sid'), d: f.get('d'), surah: f.get('s').trim(), ayah: a, prog: f.get('p').trim(), note: f.get('n').trim() }; if (r) Object.assign(r, o); else S.bta.push({ id: nid(), ...o }); logA(`Guru mencatat BTA ${stu(o.sid).name}`); re(); toast('Catatan BTA disimpan (simulasi).'); }); }
-function kasForm(k) { modal(k ? 'Ubah transaksi' : 'Transaksi baru', fld('Jenis', 'type', { v: k?.type || 'income', opts: [['income', 'Pemasukan'], ['expense', 'Pengeluaran']] }) + fld('Tanggal transaksi', 'd', { type: 'date', v: k?.d || ymd(), req: true }) + fld('Nominal (Rp)', 'amt', { type: 'number', v: k?.amt, req: true, min: 1 }) + fld('Kategori (opsional)', 'category', { v: k?.category || '', max: 80 }) + fld('Keterangan', 'desc', { v: k?.desc, req: true, max: 200 }), (f) => { const amt = Math.round(+f.get('amt')); if (!(amt >= 1)) return 'Nominal harus lebih dari 0.'; if (!f.get('d')) return 'Tanggal wajib diisi.'; kasSaveDb(k, {type:f.get('type'),d:f.get('d'),amt,category:f.get('category').trim(),desc:f.get('desc').trim()}); }); }
+function kasForm(k) {
+  const body = fld('Jenis', 'type', { v: k?.type || 'income', opts: [['income', 'Pemasukan'], ['expense', 'Pengeluaran']] }) +
+    fld('Tanggal transaksi', 'd', { type: 'date', v: k?.d || ymd(), req: true }) +
+    fld('Nominal (Rp)', 'amt', { type: 'number', v: k?.amt, req: true, min: 1 }) +
+    fld('Kategori (opsional)', 'category', { v: k?.category || '', max: 80 }) +
+    fld('Keterangan', 'desc', { v: k?.desc, req: true, max: 200 }) +
+    '<div class="fld"><label class="lb" for="kasReceipt">Foto struk (opsional)</label><input id="kasReceipt" name="receipt" type="file" accept="image/jpeg,image/png,image/webp" capture="environment"><small class="mut">Maksimal 8 MB. Foto diproses di browser untuk membaca teks.</small><button type="button" class="btn sec sm" id="kasOcr" style="margin-top:8px">Baca foto struk otomatis</button><p id="kasOcrStatus" class="mut" style="margin-top:8px" aria-live="polite">Hasil pembacaan akan mengisi tanggal, nominal, dan keterangan. Periksa sebelum menyimpan.</p></div>';
+  const el = modal(k ? 'Ubah transaksi' : 'Transaksi baru', body, (f) => {
+    const amt = Math.round(+f.get('amt')), file = f.get('receipt');
+    if (!(amt >= 1)) return 'Nominal harus lebih dari 0.';
+    if (!f.get('d')) return 'Tanggal wajib diisi.';
+    if (file && file.size > 8 * 1024 * 1024) return 'Foto maksimal 8 MB.';
+    kasSaveDb(k, {type:f.get('type'),d:f.get('d'),amt,category:f.get('category').trim(),desc:f.get('desc').trim(),receipt:file && file.size ? file : null});
+  });
+  const btn = el.querySelector('#kasOcr'), status = el.querySelector('#kasOcrStatus');
+  btn.addEventListener('click', async () => {
+    const file = el.querySelector('[name="receipt"]').files[0];
+    if (!file) { status.textContent = 'Pilih foto struk terlebih dahulu.'; return; }
+    if (!window.Tesseract) { status.textContent = 'Modul pembaca foto belum termuat. Periksa koneksi lalu coba lagi.'; return; }
+    btn.disabled = true; status.textContent = 'Sedang membaca foto. Proses pertama dapat memerlukan waktu untuk mengunduh data bahasa…';
+    try {
+      const result = await window.Tesseract.recognize(file, 'eng', { logger: m => { if (m.status === 'recognizing text') status.textContent = 'Membaca teks… ' + Math.round((m.progress || 0) * 100) + '%'; } });
+      const raw = result.data.text || '', lines = raw.split(String.fromCharCode(10)).map(x => x.trim()).filter(Boolean);
+      const totalLine = lines.find(x => /grand\s*total|total|amount\s*due|jumlah/i.test(x)) || '';
+      const amountSource = totalLine || lines.slice().reverse().find(x => /[0-9][0-9.,]{2,}/.test(x)) || '';
+      const matches = [...amountSource.matchAll(/(?:rp\s*)?([0-9]{1,3}(?:[. ,][0-9]{3})+(?:[,\.][0-9]{2})?|[0-9]{4,})/gi)];
+      let amount = 0;
+      if (matches.length) { const token = matches[matches.length - 1][1].replace(/[., ]/g, ''); amount = Number(token); }
+      const dateMatch = raw.match(/(?:([0-3]?\d)[/.-]([01]?\d)[/.-](20\d{2})|(20\d{2})[-/]([01]?\d)[-/]([0-3]?\d))/);
+      if (dateMatch) {
+        const d = dateMatch[4] ? dateMatch[4]+'-'+String(dateMatch[5]).padStart(2,'0')+'-'+String(dateMatch[6]).padStart(2,'0') : dateMatch[3]+'-'+String(dateMatch[2]).padStart(2,'0')+'-'+String(dateMatch[1]).padStart(2,'0');
+        if (d >= '2000-01-01' && d <= ymd()) el.querySelector('[name="d"]').value = d;
+      }
+      if (amount > 0 && Number.isSafeInteger(amount)) el.querySelector('[name="amt"]').value = amount;
+      const description = lines.find(x => x.length > 3 && !/^(rp|total|subtotal|tunai|cash|change|kembali|tanggal|date)/i.test(x));
+      if (description && !el.querySelector('[name="desc"]').value) el.querySelector('[name="desc"]').value = description.slice(0,200);
+      status.textContent = 'Pembacaan selesai. ' + (amount ? 'Nominal terdeteksi: Rp ' + amount.toLocaleString('id-ID') + '. ' : 'Nominal belum terbaca dengan yakin. ') + 'Periksa dan koreksi semua kolom sebelum menyimpan.';
+    } catch (err) { console.error('OCR struk:', err); status.textContent = 'Foto belum berhasil dibaca. Isi data transaksi secara manual.'; }
+    finally { btn.disabled = false; }
+  });
+}
 function siForm(s) { modal(s ? 'Ubah data siswa' : 'Tambah siswa (DEMO)', fld('Nama lengkap', 'n', { v: s?.name, req: true, max: 100 }) + fld('NIS (opsional)', 'nis', { v: s?.nis }) + (s ? `<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="a" ${s.active ? 'checked' : ''} style="width:18px;height:18px;min-height:0"> Siswa aktif (nonaktif = tidak bisa login)</label>` : ''), (f) => { if (s) { s.name = f.get('n').trim(); s.nis = f.get('nis').trim(); s.active = f.get('a') === 'on'; S.accounts.forEach((x) => { if (x.sid === s.id) { x.name = s.name; if (x.role === 'siswa') x.active = s.active; } }); } else { const id = nid(); S.students.push({ id, no: nextNo(), name: f.get('n').trim(), nis: f.get('nis').trim(), active: true }); S.sum[id] = { st: 'not_submitted', d: null, note: '', h: [] }; } re(); toast('Data siswa disimpan (simulasi).'); }); }
 function anForm(a, draft) {
   const v = draft || (a ? { title: a.title, body: a.body, pin: a.is_pinned } : {});
